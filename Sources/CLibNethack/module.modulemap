@@ -1,0 +1,6 @@
+module CLibNethack [system] {
+    // TODO: Update this header name once the NetHack build is configured
+    // and you know which public header(s) to expose (e.g. "nethack.h", "hack.h").
+    header "nethack.h"
+    export *
+}
