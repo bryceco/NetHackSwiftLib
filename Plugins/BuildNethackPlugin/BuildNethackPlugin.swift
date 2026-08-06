@@ -5,7 +5,7 @@ import Foundation
 struct BuildNethackPlugin: CommandPlugin {
     func performCommand(context: PluginContext, arguments: [String]) async throws {
         let packageDir = context.package.directoryURL.path(percentEncoded: false)
-        let nethackDir = "\(packageDir)/vendor/NetHack"
+        let nethackDir = "\(packageDir)/../NetHack"
         let isDebug = arguments.contains("--debug")
 
         if isDebug {
@@ -37,10 +37,10 @@ struct BuildNethackPlugin: CommandPlugin {
 
         print("""
 
-            Build complete. libnh.a is at vendor/NetHack/src/libnh.a
+            Build complete. libnh.a is at ../NetHack/src/libnh.a
 
             Add libnh.a to your app target's "Link Binary With Libraries" build
-            phase and add vendor/NetHack/src to its library search paths.
+            phase and add ../NetHack/src to its library search paths.
             """)
     }
 

@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "SwiftLibNethack",
+    name: "NetHackSwiftLib",
     platforms: [.macOS(.v13)],
     products: [
         .library(
-            name: "SwiftLibNethack",
-            targets: ["SwiftLibNethack"]
+            name: "NetHackSwiftLib",
+            targets: ["NetHackSwiftLib"]
         ),
     ],
     targets: [
@@ -23,12 +23,12 @@ let package = Package(
 
         // Swift API layer.
         .target(
-            name: "SwiftLibNethack",
+            name: "NetHackSwiftLib",
             dependencies: ["NetHackBridge"]
         ),
 
         // Command plugin: 'swift package plugin build-nethack'
-        // Builds libnh.a from source in vendor/NetHack/ using make.
+        // Builds libnh.a from source in the sibling NetHack/ directory using make.
         .plugin(
             name: "BuildNethackPlugin",
             capability: .command(
@@ -38,7 +38,7 @@ let package = Package(
                 ),
                 permissions: [
                     .writeToPackageDirectory(
-                        reason: "Writes libnh.a to vendor/NetHack/src/"
+                        reason: "Writes build artifacts to the sibling NetHack/ directory"
                     ),
                 ]
             )
