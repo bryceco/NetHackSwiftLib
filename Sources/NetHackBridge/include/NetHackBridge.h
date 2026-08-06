@@ -53,7 +53,6 @@ NS_ASSUME_NONNULL_BEGIN
 @class NetHackBridge;
 
 @protocol NetHackBridgeDelegate <NSObject>
-@optional
 
 // --- Output callbacks ---
 

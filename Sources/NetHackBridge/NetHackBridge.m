@@ -130,9 +130,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *text = @(str);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            if ([delegate respondsToSelector:@selector(nethackBridge:didPrintString:)]) {
-                [delegate nethackBridge:_activeBridge didPrintString:text];
-            }
+            [delegate nethackBridge:_activeBridge didPrintString:text];
         }];
 
     } else if (strcmp(name, "getlin") == 0) {
@@ -144,11 +142,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
                                                                       prompt:@(query)];
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchInput:req block:^{
-            if ([delegate respondsToSelector:@selector(nethackBridge:needsLineInput:)]) {
-                [delegate nethackBridge:_activeBridge needsLineInput:req];
-            } else {
-                [req cancel];
-            }
+            [delegate nethackBridge:_activeBridge needsLineInput:req];
         }];
     }
 
