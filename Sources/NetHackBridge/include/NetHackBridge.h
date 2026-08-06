@@ -2,6 +2,30 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Opaque window identifier assigned by NetHack.
+typedef int NHWindowID;
+
+/// NetHack window types, passed to create_nhwindow().
+typedef NS_ENUM(int, NHWindowType) {
+    NHWindowTypeMessage = 1,  ///< Top line — chat / message log.
+    NHWindowTypeStatus  = 2,  ///< Deprecated bottom-status (avoid new use).
+    NHWindowTypeMap     = 3,  ///< Main dungeon grid.
+    NHWindowTypeMenu    = 4,  ///< Inventory / selection menus.
+    NHWindowTypeText    = 5,  ///< Full-screen help / text display.
+};
+
+/// Text-rendering attribute flags passed to putstr().
+typedef NS_ENUM(int, NHTextAttribute) {
+    NHTextAttributeNone      = 0,
+    NHTextAttributeBold      = 1,
+    NHTextAttributeDim       = 2,
+    NHTextAttributeItalic    = 3,
+    NHTextAttributeUnderline = 4,
+    NHTextAttributeBlink     = 5,
+    NHTextAttributeInverse   = 7,
+};
+
+
 // ---------------------------------------------------------------------------
 // NHInputRequest
 //
@@ -43,6 +67,37 @@ NS_ASSUME_NONNULL_BEGIN
 
 
 // ---------------------------------------------------------------------------
+// NHKeyInputRequest  (nhgetch)
+//
+// NetHack needs a single keypress. The delegate must call -fulfillWithKey:.
+// ---------------------------------------------------------------------------
+@interface NHKeyInputRequest : NHInputRequest
+
+/// Return `key` to NetHack and unblock.
+- (void)fulfillWithKey:(int)key;
+
+@end
+
+
+// ---------------------------------------------------------------------------
+// NHKeyOrMouseInputRequest  (nh_poskey)
+//
+// NetHack needs a keypress or a map-position click. The delegate must call
+// exactly one of -fulfillWithKey: or -fulfillWithMouseX:y:modifier:.
+// ---------------------------------------------------------------------------
+@interface NHKeyOrMouseInputRequest : NHInputRequest
+
+/// Return a keyboard `key` to NetHack and unblock.
+- (void)fulfillWithKey:(int)key;
+
+/// Return a map-click to NetHack: writes 0 as the key return value and fills
+/// in the x/y/modifier output pointers, then unblocks.
+- (void)fulfillWithMouseX:(int)x y:(int)y modifier:(int)mod;
+
+@end
+
+
+// ---------------------------------------------------------------------------
 // NetHackBridgeDelegate
 //
 // Output callbacks are dispatched asynchronously to the main thread.
@@ -56,15 +111,38 @@ NS_ASSUME_NONNULL_BEGIN
 
 // --- Output callbacks ---
 
-/// NetHack wants to print a plain string directly to the screen (e.g. startup
-/// messages and errors). Append a newline when displaying.
+/// raw_print — plain string, typically startup messages or errors.
 - (void)nethackBridge:(NetHackBridge *)bridge didPrintString:(NSString *)string;
+
+/// raw_print_bold — same as raw_print but displayed in bold/standout.
+- (void)nethackBridge:(NetHackBridge *)bridge didPrintBoldString:(NSString *)string;
+
+/// curs — move the displayable cursor to (x, y) in the given window.
+/// 1 <= x < cols, 0 <= y < rows.
+- (void)nethackBridge:(NetHackBridge *)bridge
+  didMoveCursorInWindow:(NHWindowID)window
+                      x:(int)x
+                      y:(int)y;
+
+/// putstr — print a string with a text attribute into a window.
+- (void)nethackBridge:(NetHackBridge *)bridge
+               window:(NHWindowID)window
+         didPutString:(NSString *)string
+            attribute:(NHTextAttribute)attribute;
 
 // --- Input callbacks ---
 
-/// NetHack needs a line of text from the user.
+/// getlin — NetHack needs a line of text from the user.
 /// Call [request fulfill:responseString] or [request cancel] when done.
 - (void)nethackBridge:(NetHackBridge *)bridge needsLineInput:(NHLineInputRequest *)request;
+
+/// nhgetch — NetHack needs a single keypress.
+/// Call [request fulfillWithKey:keyCode] when done.
+- (void)nethackBridge:(NetHackBridge *)bridge needsKeyInput:(NHKeyInputRequest *)request;
+
+/// nh_poskey — NetHack needs a keypress or a map-position click.
+/// Call [request fulfillWithKey:] or [request fulfillWithMouseX:y:modifier:] when done.
+- (void)nethackBridge:(NetHackBridge *)bridge needsKeyOrMouseInput:(NHKeyOrMouseInputRequest *)request;
 
 @end
 

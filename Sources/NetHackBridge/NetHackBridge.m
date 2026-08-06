@@ -1,5 +1,6 @@
 #import "NetHackBridge.h"
 #include <stdarg.h>
+#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -11,8 +12,8 @@ extern int  nhmain(int argc, char *argv[]);
 // NetHack's input buffer size (see include/global.h)
 #define BUFSZ 256
 
-// ---------------------—-----------------------------------------------------
-// NHInputRequest - private interface
+// ---------------------------------------------------------------------------
+// NHInputRequest — private interface
 // ---------------------------------------------------------------------------
 
 @interface NHInputRequest ()
@@ -84,6 +85,64 @@ extern int  nhmain(int argc, char *argv[]);
 @end
 
 // ---------------------------------------------------------------------------
+// NHKeyInputRequest — private interface + implementation
+// ---------------------------------------------------------------------------
+
+@implementation NHKeyInputRequest
+
+- (void)fulfillWithKey:(int)key {
+    *(int *)self.returnPointer = key;
+    [super fulfill];
+}
+
+@end
+
+// ---------------------------------------------------------------------------
+// NHKeyOrMouseInputRequest — private interface + implementation
+// ---------------------------------------------------------------------------
+
+@interface NHKeyOrMouseInputRequest ()
+- (instancetype)initWithReturnPointer:(int *)retPtr
+                                    x:(int16_t *)xp
+                                    y:(int16_t *)yp
+                                  mod:(int *)modp;
+@end
+
+@implementation NHKeyOrMouseInputRequest {
+    int16_t *_xp;
+    int16_t *_yp;
+    int *_modp;
+}
+
+- (instancetype)initWithReturnPointer:(int *)retPtr
+                                    x:(int16_t *)xp
+                                    y:(int16_t *)yp
+                                  mod:(int *)modp {
+    self = [super initWithReturnPointer:retPtr];
+    if (self) {
+        _xp = xp;
+        _yp = yp;
+        _modp = modp;
+    }
+    return self;
+}
+
+- (void)fulfillWithKey:(int)key {
+    *(int *)self.returnPointer = key;
+    [super fulfill];
+}
+
+- (void)fulfillWithMouseX:(int)x y:(int)y modifier:(int)mod {
+    *(int *)self.returnPointer = 0;  // 0 = mouse/position event
+    if (_xp)   *_xp   = (int16_t)x;
+    if (_yp)   *_yp   = (int16_t)y;
+    if (_modp) *_modp = mod;
+    [super fulfill];
+}
+
+@end
+
+// ---------------------------------------------------------------------------
 // NetHackBridge — private interface
 // ---------------------------------------------------------------------------
 
@@ -107,23 +166,21 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
     va_start(args, fmt);
 
     // Dispatch on window function name.
-    // See vendor/NetHack/doc/window.txt for the complete list and per-function
-    // argument types.
+    // All names carry the "shim_" prefix from winshim.c's VDECLCB/DECLCB macros.
+    // See vendor/NetHack/doc/window.txt for semantics and argument types.
+    // See vendor/NetHack/win/shim/winshim.c for the exact fmt strings.
     //
     // Output (non-blocking):
-    //   [_activeBridge dispatchOutput:^{
-    //       [_activeBridge.delegate nethackBridge:_activeBridge ...];
-    //   }];
+    //   [_activeBridge dispatchOutput:^{ ... }];
     //
     // Input (blocking):
-    //   NHSomeRequest *req = [[NHSomeRequest alloc] initWithReturnPointer:ret_ptr ...];
-    //   [_activeBridge dispatchInput:req block:^{
-    //       [_activeBridge.delegate nethackBridge:_activeBridge needs...:req];
-    //   }];
+    //   NHSomeRequest *req = [[NHSomeRequest alloc] initWith...];
+    //   [_activeBridge dispatchInput:req block:^{ ... }];
+
     if (false) {
         // placeholder — keeps the else-if chain well-formed as cases are added
 
-    } else if (strcmp(name, "raw_print") == 0) {
+    } else if (strcmp(name, "shim_raw_print") == 0) {
         // fmt = "vs": void return, one string argument.
         // Non-blocking output: display a plain string (e.g. startup messages).
         const char *str = va_arg(args, const char *);
@@ -133,11 +190,72 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
             [delegate nethackBridge:_activeBridge didPrintString:text];
         }];
 
-    } else if (strcmp(name, "getlin") == 0) {
+    } else if (strcmp(name, "shim_raw_print_bold") == 0) {
+        // fmt = "vs": void return, one string argument.
+        const char *str = va_arg(args, const char *);
+        NSString *text = @(str);
+        id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
+        [_activeBridge dispatchOutput:^{
+            [delegate nethackBridge:_activeBridge didPrintBoldString:text];
+        }];
+
+    } else if (strcmp(name, "shim_curs") == 0) {
+        // fmt = "viii": void return, winid, x (column), y (row).
+        int window = va_arg(args, int);
+        int x      = va_arg(args, int);
+        int y      = va_arg(args, int);
+        id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
+        [_activeBridge dispatchOutput:^{
+            [delegate nethackBridge:_activeBridge didMoveCursorInWindow:window x:x y:y];
+        }];
+
+    } else if (strcmp(name, "shim_putstr") == 0) {
+        // fmt = "viis": void return, winid, attr, string.
+        int window     = va_arg(args, int);
+        int attr       = va_arg(args, int);
+        const char *str = va_arg(args, const char *);
+        NSString *text = @(str);
+        id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
+        [_activeBridge dispatchOutput:^{
+            [delegate nethackBridge:_activeBridge
+                             window:window
+                       didPutString:text
+                          attribute:(NHTextAttribute)attr];
+        }];
+
+    } else if (strcmp(name, "shim_get_nh_event") == 0) {
+        // fmt = "v": no-op in virtually all window ports; just consume.
+
+    } else if (strcmp(name, "shim_nhgetch") == 0) {
+        // fmt = "i": int return, no arguments.
+        // Blocking input: return a single keypress.
+        NHKeyInputRequest *req = [[NHKeyInputRequest alloc] initWithReturnPointer:ret_ptr];
+        id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
+        [_activeBridge dispatchInput:req block:^{
+            [delegate nethackBridge:_activeBridge needsKeyInput:req];
+        }];
+
+    } else if (strcmp(name, "shim_nh_poskey") == 0) {
+        // fmt = "ippp": int return, coordxy *x, coordxy *y, int *mod.
+        // Blocking input: return a keypress (non-zero) or a map-position click (0).
+        int16_t *xp  = va_arg(args, int16_t *);
+        int16_t *yp  = va_arg(args, int16_t *);
+        int     *modp = va_arg(args, int *);
+        NHKeyOrMouseInputRequest *req =
+            [[NHKeyOrMouseInputRequest alloc] initWithReturnPointer:ret_ptr
+                                                                  x:xp
+                                                                  y:yp
+                                                                mod:modp];
+        id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
+        [_activeBridge dispatchInput:req block:^{
+            [delegate nethackBridge:_activeBridge needsKeyOrMouseInput:req];
+        }];
+
+    } else if (strcmp(name, "shim_getlin") == 0) {
         // fmt = "vsp": void return, one string (query/prompt), one pointer (char buf).
         // Blocking input: ask the user for a line of text.
         const char *query = va_arg(args, const char *);
-        char *bufp = va_arg(args, char *);
+        char *bufp        = va_arg(args, char *);
         NHLineInputRequest *req = [[NHLineInputRequest alloc] initWithBuffer:bufp
                                                                       prompt:@(query)];
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;

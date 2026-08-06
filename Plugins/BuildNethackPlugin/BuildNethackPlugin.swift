@@ -35,26 +35,12 @@ struct BuildNethackPlugin: CommandPlugin {
                        arguments: makeArgs,
                        workingDirectory: nethackDir)
 
-        // Write vendor/lib/pkgconfig/nethack.pc so SPM can find the library via pkg-config.
-        let pkgConfigDir = "\(packageDir)/vendor/lib/pkgconfig"
-        try FileManager.default.createDirectory(atPath: pkgConfigDir,
-                                                withIntermediateDirectories: true,
-                                                attributes: nil)
-        let pc = """
-            Name: nethack
-            Description: NetHack game library (libnh)
-            Version: 3.7
-            Libs: -L\(nethackDir)/src -lnh
-            Cflags:
-            """
-        try pc.write(toFile: "\(pkgConfigDir)/nethack.pc", atomically: true, encoding: .utf8)
-
         print("""
 
             Build complete. libnh.a is at vendor/NetHack/src/libnh.a
 
-            Build the Swift package with:
-              PKG_CONFIG_PATH=\(packageDir)/vendor/lib/pkgconfig swift build
+            Add libnh.a to your app target's "Link Binary With Libraries" build
+            phase and add vendor/NetHack/src to its library search paths.
             """)
     }
 

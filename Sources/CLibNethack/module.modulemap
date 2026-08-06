@@ -1,4 +1,0 @@
-module CLibNethack [system] {
-    header "nethack_shim.h"
-    export *
-}
