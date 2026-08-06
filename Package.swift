@@ -21,10 +21,18 @@ let package = Package(
             pkgConfig: "nethack"
         ),
 
-        // Swift API layer on top of CLibNethack.
+        // Objective-C bridge: owns the C callback and all libnh interop.
+        .target(
+            name: "NetHackBridge",
+            dependencies: ["CLibNethack"],
+            path: "Sources/NetHackBridge",
+            publicHeadersPath: "include"
+        ),
+
+        // Swift API layer.
         .target(
             name: "SwiftLibNethack",
-            dependencies: ["CLibNethack"]
+            dependencies: ["NetHackBridge"]
         ),
 
         // Command plugin: 'swift package build-nethack'
