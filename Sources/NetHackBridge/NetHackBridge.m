@@ -9,6 +9,31 @@ typedef void (*shim_callback_t)(const char *name, void *ret_ptr, const char *fmt
 extern void shim_graphics_set_callback(shim_callback_t cb);
 extern int  nhmain(int argc, char *argv[]);
 
+// ---------------------------------------------------------------------------
+// Path prefix table — mirrors the relevant prefix of struct instance_globals_f
+// (include/decl.h).  Only the first two fields are declared here; the struct
+// in libnh.a has many more, but we never touch them through this view.
+// ---------------------------------------------------------------------------
+#define NH_PREFIX_COUNT   10   // PREFIX_COUNT  (include/hack.h)
+#define NH_DATAPREFIX      4   // DATAPREFIX
+#define NH_SYSCONFPREFIX   7   // SYSCONFPREFIX
+
+struct _nh_gf_paths {
+    void *ftrap;                        // struct trap *ftrap  (one pointer)
+    char *fqn_prefix[NH_PREFIX_COUNT];  // char *fqn_prefix[PREFIX_COUNT]
+};
+extern struct _nh_gf_paths gf;
+
+static void
+nhbridge_set_paths(const char *playground, const char *resources)
+{
+    int i;
+    for (i = 0; i < NH_PREFIX_COUNT; i++)
+        gf.fqn_prefix[i] = strdup(playground);
+    gf.fqn_prefix[NH_DATAPREFIX]    = strdup(resources);
+    gf.fqn_prefix[NH_SYSCONFPREFIX] = strdup(resources);
+}
+
 // NetHack's input buffer size (see include/global.h)
 #define BUFSZ 256
 
