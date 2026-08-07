@@ -27,22 +27,6 @@ let package = Package(
             dependencies: ["NetHackBridge"]
         ),
 
-        // Command plugin: 'swift package plugin build-nethack'
-        // Builds libnh.a from source in the sibling NetHack/ directory using make.
-        .plugin(
-            name: "BuildNethackPlugin",
-            capability: .command(
-                intent: .custom(
-                    verb: "build-nethack",
-                    description: "Build libnh.a from source using make"
-                ),
-                permissions: [
-                    .writeToPackageDirectory(
-                        reason: "Writes build artifacts to the sibling NetHack/ directory"
-                    ),
-                ]
-            )
-        ),
     ],
     swiftLanguageModes: [.v6]
 )

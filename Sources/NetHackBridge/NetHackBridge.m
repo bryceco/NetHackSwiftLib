@@ -184,6 +184,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         // fmt = "vs": void return, one string argument.
         // Non-blocking output: display a plain string (e.g. startup messages).
         const char *str = va_arg(args, const char *);
+		puts(str);
         NSString *text = @(str);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
@@ -193,6 +194,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
     } else if (strcmp(name, "shim_raw_print_bold") == 0) {
         // fmt = "vs": void return, one string argument.
         const char *str = va_arg(args, const char *);
+		puts(str);
         NSString *text = @(str);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
@@ -214,6 +216,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int window     = va_arg(args, int);
         int attr       = va_arg(args, int);
         const char *str = va_arg(args, const char *);
+		puts(str);
         NSString *text = @(str);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
