@@ -13,6 +13,39 @@ extern int  nhmain(int argc, char *argv[]);
 #define BUFSZ 256
 
 // ---------------------------------------------------------------------------
+// Local mirror of NetHack's 'anything' union and 'menu_item' struct.
+// anything is a union of primitives and pointers; it is pointer-sized on all
+// supported platforms (8 bytes on 64-bit).  These definitions must stay in
+// sync with NetHack's include/global.h / include/wintype.h.
+// ---------------------------------------------------------------------------
+typedef union {
+    void *a_void;
+    long  a_long;
+} nh_anything;
+
+typedef struct {
+    long         count;       // -1 = "all"
+    nh_anything  identifier;
+} nh_menu_item;
+
+// ---------------------------------------------------------------------------
+// NHMenuSelection
+// ---------------------------------------------------------------------------
+
+@implementation NHMenuSelection
+
+- (instancetype)initWithIdentifier:(NSData *)identifier count:(long)count {
+    self = [super init];
+    if (self) {
+        _identifier = identifier;
+        _count = count;
+    }
+    return self;
+}
+
+@end
+
+// ---------------------------------------------------------------------------
 // NetHackBridge — private interface
 // ---------------------------------------------------------------------------
 
@@ -236,26 +269,34 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         // winid, glyph_info*, ANY_P*, char ch, char gch, int attr, int clr,
         // const char *str, unsigned int itemflags.
         // char args are promoted to int in the variadic call.
-        int window             = va_arg(args, int);
-        const void *glyphinfo  = va_arg(args, const void *);
-        const void *identifier = va_arg(args, const void *);
-        int ch                 = va_arg(args, int);   // char promoted
-        int gch                = va_arg(args, int);   // char promoted
-        int attr               = va_arg(args, int);
-        int clr                = va_arg(args, int);
-        const char *str        = va_arg(args, const char *);
-        unsigned int itemflags = va_arg(args, unsigned int);
+        int window              = va_arg(args, int);
+        const void *glyphinfo   = va_arg(args, const void *);
+        const void *identPtr    = va_arg(args, const void *);
+        int ch                  = va_arg(args, int);   // char promoted
+        int gch                 = va_arg(args, int);   // char promoted
+        int attr                = va_arg(args, int);
+        int clr                 = va_arg(args, int);
+        const char *str         = va_arg(args, const char *);
+        unsigned int itemflags  = va_arg(args, unsigned int);
         NSString *text = @(str);
+        // Copy the anything identifier now while the pointer is still valid.
+        nh_anything identCopy;
+        if (identPtr) {
+            memcpy(&identCopy, identPtr, sizeof(nh_anything));
+        } else {
+            memset(&identCopy, 0, sizeof(nh_anything));
+        }
+        NSData *identData = [NSData dataWithBytes:&identCopy length:sizeof(nh_anything)];
         [_activeBridge dispatchOutput:^{
             [_activeDelegate addMenuItemIn:window
-							  accel:(char)ch
-						 groupAccel:(char)gch
-							   attr:attr
-							  color:clr
-							 string:text
-							  flags:itemflags
-						  glyphInfo:glyphinfo
-						 identifier:identifier];
+                                     accel:(char)ch
+                                groupAccel:(char)gch
+                                      attr:attr
+                                     color:clr
+                                    string:text
+                                     flags:itemflags
+                                 glyphInfo:glyphinfo
+                                identifier:identData];
         }];
 
     } else if (strcmp(name, "shim_end_menu") == 0) {
@@ -269,9 +310,42 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
 
     } else if (strcmp(name, "shim_select_menu") == 0) {
         // fmt = "iiip": int return, winid, int how, MENU_ITEM_P **menu_list.
-        // Tricky: blocking; returns count of selected items and fills *menu_list.
-        // Requires a new request type and MENU_ITEM_P bridging — not yet implemented.
-        assert(0 && "shim_select_menu not yet implemented");
+        // Blocking: presents the previously built menu and waits for the user
+        // to select items.  Returns the count (>= 0) or -1 if cancelled.
+        // The caller (NetHack) is responsible for freeing *menu_list.
+        int    window      = va_arg(args, int);
+        int    how         = va_arg(args, int);
+        void **menuListPtr = va_arg(args, void **);
+        int   *retPtr      = (int *)ret_ptr;
+        [_activeBridge dispatchInput:^(void (^done)(void)) {
+            [_activeDelegate selectMenuIn:window how:how
+                               completion:^(NSArray<NHMenuSelection *> *selections) {
+                if (!selections) {
+                    // User cancelled.
+                    *retPtr = -1;
+                    *menuListPtr = NULL;
+                } else if (selections.count == 0) {
+                    *retPtr = 0;
+                    *menuListPtr = NULL;
+                } else {
+                    NSUInteger n = selections.count;
+                    nh_menu_item *items = malloc(n * sizeof(nh_menu_item));
+                    for (NSUInteger i = 0; i < n; i++) {
+                        NHMenuSelection *sel = selections[i];
+                        items[i].count = sel.count;
+                        if (sel.identifier.length >= sizeof(nh_anything)) {
+                            [sel.identifier getBytes:&items[i].identifier
+                                              length:sizeof(nh_anything)];
+                        } else {
+                            memset(&items[i].identifier, 0, sizeof(nh_anything));
+                        }
+                    }
+                    *retPtr = (int)n;
+                    *menuListPtr = items;
+                }
+                done();
+            }];
+        }];
 
     } else if (strcmp(name, "shim_message_menu") == 0) {
         // fmt = "ciis": char return, char let, int how, const char *mesg.

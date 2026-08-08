@@ -27,6 +27,20 @@ typedef NS_ENUM(int, NHTextAttribute) {
 
 
 // ---------------------------------------------------------------------------
+// NHMenuSelection
+//
+// Represents one item chosen by the user in response to a selectMenuIn:
+// call.  The identifier is an opaque copy of the anything value originally
+// passed to addMenuItemIn:; count is the selection multiplier (-1 = all).
+// ---------------------------------------------------------------------------
+@interface NHMenuSelection : NSObject
+@property (nonatomic) NSData *identifier;
+@property (nonatomic) long count;
+- (instancetype)initWithIdentifier:(NSData *)identifier count:(long)count;
+@end
+
+
+// ---------------------------------------------------------------------------
 // NetHackBridgeDelegate
 //
 // Output callbacks are dispatched synchronously to the main thread (the
@@ -103,10 +117,17 @@ accel:(char)accel
         string:(NSString *)string
          flags:(unsigned int)flags
      glyphInfo:(const void *)glyphInfo
-    identifier:(const void *)identifier;
+    identifier:(NSData *)identifier;
 
 /// end_menu — finalise the current menu with an optional prompt string.
 - (void)endMenuIn:(NHWindowID)window prompt:(nullable NSString *)prompt;
+
+/// select_menu — present the built menu and wait for the user to select items.
+/// how: 0 = PICK_NONE (display only), 1 = PICK_ONE, 2 = PICK_ANY.
+/// Call completion(selections) with the chosen items, or completion(nil) to cancel.
+- (void)selectMenuIn:(NHWindowID)window
+                 how:(int)how
+          completion:(void (^)(NSArray<NHMenuSelection *> * _Nullable selections))completion;
 
 // --- Status bar ---
 
