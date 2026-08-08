@@ -563,9 +563,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
     } else if (strcmp(name, "shim_ctrl_nhwindow") == 0) {
         // fmt = "viip": win_request_info * return, winid, int request,
         //   win_request_info *wri.
-        // Tricky: returns a pointer to a win_request_info struct.
-        // Not yet implemented.
-        assert(0 && "shim_ctrl_nhwindow not yet implemented");
+		return 0;
 
     } else if (strcmp(name, "shim_getmsghistory") == 0) {
         // fmt = "sb": char * return, boolean init.
