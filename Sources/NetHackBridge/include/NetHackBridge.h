@@ -111,6 +111,13 @@ typedef NS_ENUM(int, NHTextAttribute) {
 
 // --- Output callbacks ---
 
+/// create_nhwindow — NetHack created a new window of the given type.
+/// The window ID is assigned by the bridge and will be used in subsequent
+/// calls (putstr, curs, display_nhwindow, etc.).
+- (void)nethackBridge:(NetHackBridge *)bridge
+      didCreateWindow:(NHWindowID)window
+               ofType:(NHWindowType)type;
+
 /// raw_print — plain string, typically startup messages or errors.
 - (void)nethackBridge:(NetHackBridge *)bridge didPrintString:(NSString *)string;
 

@@ -205,6 +205,33 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
     if (false) {
         // placeholder — keeps the else-if chain well-formed as cases are added
 
+    } else if (strcmp(name, "shim_init_nhwindows") == 0) {
+        // fmt = "vpp": void return, int *argcp, char **argv.
+        // The windowing system has nothing to initialise on this side.
+
+    } else if (strcmp(name, "shim_status_init") == 0) {
+        // fmt = "v": void return, no arguments.
+
+    } else if (strcmp(name, "shim_create_nhwindow") == 0) {
+        // fmt = "ii": int return (winid), int argument (window type).
+        // Allocates a new window ID, writes it to ret_ptr, then notifies
+        // the delegate asynchronously so it can set up its UI for this window.
+        // The ID must be written before this callback returns because the shim
+        // reads ret immediately after shim_graphics_callback() returns.
+        int type = va_arg(args, int);
+
+        static int nextWindowID = 1;
+        int windowID = nextWindowID++;
+        *(int *)ret_ptr = windowID;
+
+        NHWindowType windowType = (NHWindowType)type;
+        id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
+        [_activeBridge dispatchOutput:^{
+            [delegate nethackBridge:_activeBridge
+                    didCreateWindow:windowID
+                             ofType:windowType];
+        }];
+
     } else if (strcmp(name, "shim_raw_print") == 0) {
         // fmt = "vs": void return, one string argument.
         // Non-blocking output: display a plain string (e.g. startup messages).
@@ -290,7 +317,9 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         [_activeBridge dispatchInput:req block:^{
             [delegate nethackBridge:_activeBridge needsLineInput:req];
         }];
-    }
+	} else {
+		assert(false);
+	}
 
     va_end(args);
 }
@@ -326,7 +355,11 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
 }
 
 - (void)dispatchOutput:(void (^)(void))block {
-    dispatch_async(dispatch_get_main_queue(), block);
+    // Use dispatch_sync so each output callback fully completes before the
+    // NetHack thread issues the next shim call. This preserves ordering and
+    // prevents races where a later callback (e.g. start_menu) runs before the
+    // delegate has finished processing the preceding one (e.g. create_nhwindow).
+    dispatch_sync(dispatch_get_main_queue(), block);
 }
 
 - (void)dispatchInput:(NHInputRequest *)request block:(void (^)(void))block {
