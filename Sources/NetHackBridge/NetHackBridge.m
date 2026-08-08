@@ -216,14 +216,14 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         (void)va_arg(args, void *);  // argv
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridgeInitWindows:_activeBridge];
+            [delegate initWindows];
         }];
 
     } else if (strcmp(name, "shim_status_init") == 0) {
         // fmt = "v": void return, no arguments.
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridgeInitStatus:_activeBridge];
+            [delegate initStatus];
         }];
 
     } else if (strcmp(name, "shim_exit_nhwindows") == 0) {
@@ -232,7 +232,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *msg = str ? @(str) : nil;
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge exitWindowsWithMessage:msg];
+            [delegate exitWindowsWithMessage:msg];
         }];
 
     } else if (strcmp(name, "shim_suspend_nhwindows") == 0) {
@@ -241,14 +241,14 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *msg = str ? @(str) : nil;
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge suspendWindowsWithMessage:msg];
+            [delegate suspendWindowsWithMessage:msg];
         }];
 
     } else if (strcmp(name, "shim_resume_nhwindows") == 0) {
         // fmt = "v": void return, no arguments.
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridgeResumeWindows:_activeBridge];
+            [delegate resumeWindows];
         }];
 
     // -----------------------------------------------------------------------
@@ -270,9 +270,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NHWindowType windowType = (NHWindowType)type;
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge
-                    createNhwindow:windowID
-                             ofType:windowType];
+            [delegate createNhwindow:windowID ofType:windowType];
         }];
 
     } else if (strcmp(name, "shim_clear_nhwindow") == 0) {
@@ -280,7 +278,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int window = va_arg(args, int);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge clearNhwindow:window];
+            [delegate clearNhwindow:window];
         }];
 
     } else if (strcmp(name, "shim_display_nhwindow") == 0) {
@@ -295,7 +293,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         }
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge displayNhwindow:window];
+            [delegate displayNhwindow:window];
         }];
 
     } else if (strcmp(name, "shim_destroy_nhwindow") == 0) {
@@ -303,7 +301,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int window = va_arg(args, int);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge destroyNhwindow:window];
+            [delegate destroyNhwindow:window];
         }];
 
     // -----------------------------------------------------------------------
@@ -317,7 +315,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *text = @(str);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge rawPrint:text];
+            [delegate rawPrint:text];
         }];
 
     } else if (strcmp(name, "shim_raw_print_bold") == 0) {
@@ -327,7 +325,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *text = @(str);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge rawPrintBold:text];
+            [delegate rawPrintBold:text];
         }];
 
     } else if (strcmp(name, "shim_curs") == 0) {
@@ -337,7 +335,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int y      = va_arg(args, int);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge didMoveCursorInWindow:window x:x y:y];
+            [delegate didMoveCursorInWindow:window x:x y:y];
         }];
 
     } else if (strcmp(name, "shim_putstr") == 0) {
@@ -349,10 +347,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *text = @(str);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge
-                             window:window
-                       putstr:text
-                          attribute:(NHTextAttribute)attr];
+            [delegate window:window putstr:text attribute:(NHTextAttribute)attr];
         }];
 
     } else if (strcmp(name, "shim_display_file") == 0) {
@@ -362,7 +357,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *file = @(filename);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge displayFile:file complain:(BOOL)complain];
+            [delegate displayFile:file complain:(BOOL)complain];
         }];
 
     // -----------------------------------------------------------------------
@@ -381,12 +376,11 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         const void *bkglyphinfo = va_arg(args, const void *);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge
-                             window:window
-                  printGlyphAtX:x
-                                  y:y
-                          glyphInfo:glyphinfo
-                backgroundGlyphInfo:bkglyphinfo];
+            [delegate window:window
+              printGlyphAtX:x
+                          y:y
+                  glyphInfo:glyphinfo
+        backgroundGlyphInfo:bkglyphinfo];
         }];
 
     } else if (strcmp(name, "shim_cliparound") == 0) {
@@ -395,7 +389,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int y = va_arg(args, int);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge cliparound:x y:y];
+            [delegate cliparound:x y:y];
         }];
 
     // -----------------------------------------------------------------------
@@ -408,7 +402,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         unsigned long behavior = va_arg(args, unsigned long);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge startMenu:window behavior:behavior];
+            [delegate startMenu:window behavior:behavior];
         }];
 
     } else if (strcmp(name, "shim_add_menu") == 0) {
@@ -428,16 +422,15 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *text = @(str);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge
-                             window:window
-              addMenuItemWithAccel:(char)ch
-                          groupAccel:(char)gch
-                                attr:attr
-                               color:clr
-                              string:text
-                               flags:itemflags
-                           glyphInfo:glyphinfo
-                          identifier:identifier];
+            [delegate window:window
+        addMenuItemWithAccel:(char)ch
+                  groupAccel:(char)gch
+                        attr:attr
+                       color:clr
+                      string:text
+                       flags:itemflags
+                   glyphInfo:glyphinfo
+                  identifier:identifier];
         }];
 
     } else if (strcmp(name, "shim_end_menu") == 0) {
@@ -447,7 +440,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *promptStr = prompt ? @(prompt) : nil;
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge endMenuInWindow:window prompt:promptStr];
+            [delegate endMenuInWindow:window prompt:promptStr];
         }];
 
     } else if (strcmp(name, "shim_select_menu") == 0) {
@@ -477,11 +470,10 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *fmtStr    = @(fmt_str);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge
-               enableStatusField:fieldidx
-                               name:nameStr
-                             format:fmtStr
-                            enabled:(BOOL)enable];
+            [delegate enableStatusField:fieldidx
+                                 name:nameStr
+                               format:fmtStr
+                              enabled:(BOOL)enable];
         }];
 
     } else if (strcmp(name, "shim_status_update") == 0) {
@@ -495,13 +487,12 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         const unsigned long *masks   = va_arg(args, const unsigned long *);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge
-               updateStatusField:fldidx
-                                ptr:ptr
-                             change:chg
-                            percent:percent
-                              color:color
-                         colorMasks:masks];
+            [delegate updateStatusField:fldidx
+                                    ptr:ptr
+                                 change:chg
+                                percent:percent
+                                  color:color
+                             colorMasks:masks];
         }];
 
     // -----------------------------------------------------------------------
@@ -514,7 +505,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NHKeyInputRequest *req = [[NHKeyInputRequest alloc] initWithReturnPointer:ret_ptr];
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchInput:req block:^{
-            [delegate nethackBridge:_activeBridge needsKeyInput:req];
+            [delegate needsKeyInput:req];
         }];
 
     } else if (strcmp(name, "shim_nh_poskey") == 0) {
@@ -530,7 +521,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
                                                                 mod:modp];
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchInput:req block:^{
-            [delegate nethackBridge:_activeBridge needsKeyOrMouseInput:req];
+            [delegate needsKeyOrMouseInput:req];
         }];
 
     } else if (strcmp(name, "shim_getlin") == 0) {
@@ -542,7 +533,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
                                                                       prompt:@(query)];
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchInput:req block:^{
-            [delegate nethackBridge:_activeBridge needsLineInput:req];
+            [delegate needsLineInput:req];
         }];
 
     } else if (strcmp(name, "shim_yn_function") == 0) {
@@ -640,7 +631,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *bar = @(posbar);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge updatePositionBar:bar];
+            [delegate updatePositionBar:bar];
         }];
 
     } else if (strcmp(name, "shim_update_inventory") == 0) {
@@ -648,7 +639,7 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         (void)va_arg(args, int);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridgeUpdateInventory:_activeBridge];
+            [delegate updateInventory];
         }];
 
     } else if (strcmp(name, "shim_putmsghistory") == 0) {
@@ -658,16 +649,14 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         NSString *msgStr = msg ? @(msg) : nil;
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridge:_activeBridge
-               putMessageHistory:msgStr
-                          restoring:(BOOL)restoring];
+            [delegate putMessageHistory:msgStr restoring:(BOOL)restoring];
         }];
 
     } else if (strcmp(name, "shim_player_selection") == 0) {
         // fmt = "v": void return, no arguments.
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate nethackBridgeRequestPlayerSelection:_activeBridge];
+            [delegate requestPlayerSelection];
         }];
 
     } else {
