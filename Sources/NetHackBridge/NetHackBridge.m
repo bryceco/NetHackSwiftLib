@@ -9,175 +9,21 @@ typedef void (*shim_callback_t)(const char *name, void *ret_ptr, const char *fmt
 extern void shim_graphics_set_callback(shim_callback_t cb);
 extern int  nhmain(int argc, char *argv[]);
 
-// ---------------------------------------------------------------------------
-// Path prefix table — mirrors the relevant prefix of struct instance_globals_f
-// (include/decl.h).  Only the first two fields are declared here; the struct
-// in libnh.a has many more, but we never touch them through this view.
-// ---------------------------------------------------------------------------
-#define NH_PREFIX_COUNT   10   // PREFIX_COUNT  (include/hack.h)
-#define NH_DATAPREFIX      4   // DATAPREFIX
-#define NH_SYSCONFPREFIX   7   // SYSCONFPREFIX
-
-struct _nh_gf_paths {
-    void *ftrap;                        // struct trap *ftrap  (one pointer)
-    char *fqn_prefix[NH_PREFIX_COUNT];  // char *fqn_prefix[PREFIX_COUNT]
-};
-extern struct _nh_gf_paths gf;
-
-static void
-nhbridge_set_paths(const char *playground, const char *resources)
-{
-    int i;
-    for (i = 0; i < NH_PREFIX_COUNT; i++)
-        gf.fqn_prefix[i] = strdup(playground);
-    gf.fqn_prefix[NH_DATAPREFIX]    = strdup(resources);
-    gf.fqn_prefix[NH_SYSCONFPREFIX] = strdup(resources);
-}
-
 // NetHack's input buffer size (see include/global.h)
 #define BUFSZ 256
-
-// ---------------------------------------------------------------------------
-// NHInputRequest — private interface
-// ---------------------------------------------------------------------------
-
-@interface NHInputRequest ()
-@property (nonatomic) dispatch_semaphore_t semaphore;
-- (instancetype)initWithReturnPointer:(nullable void *)returnPointer;
-- (void)waitForFulfillment;
-@end
-
-@implementation NHInputRequest
-
-- (instancetype)initWithReturnPointer:(nullable void *)returnPointer {
-    self = [super init];
-    if (self) {
-        _returnPointer = returnPointer;
-        _semaphore = dispatch_semaphore_create(0);
-    }
-    return self;
-}
-
-- (void)fulfill {
-    dispatch_semaphore_signal(_semaphore);
-}
-
-- (void)waitForFulfillment {
-    dispatch_semaphore_wait(_semaphore, DISPATCH_TIME_FOREVER);
-}
-
-@end
-
-// ---------------------------------------------------------------------------
-// NHLineInputRequest — private interface + implementation
-// ---------------------------------------------------------------------------
-
-@interface NHLineInputRequest ()
-- (instancetype)initWithBuffer:(char *)bufp prompt:(NSString *)prompt;
-@end
-
-@implementation NHLineInputRequest {
-    char *_bufp;
-}
-
-- (instancetype)initWithBuffer:(char *)bufp prompt:(NSString *)prompt {
-    self = [super initWithReturnPointer:NULL];
-    if (self) {
-        _bufp = bufp;
-        _prompt = prompt;
-    }
-    return self;
-}
-
-- (void)fulfill {
-    // Called when the delegate invokes -fulfill with no argument;
-    // treat as an empty response.
-    [self fulfill:@""];
-}
-
-- (void)fulfill:(NSString *)response {
-    strlcpy(_bufp, response.UTF8String, BUFSZ);
-    [super fulfill];
-}
-
-- (void)cancel {
-    // ESC followed by NUL signals cancellation to NetHack.
-    _bufp[0] = '\033';
-    _bufp[1] = '\0';
-    [super fulfill];
-}
-
-@end
-
-// ---------------------------------------------------------------------------
-// NHKeyInputRequest — private interface + implementation
-// ---------------------------------------------------------------------------
-
-@implementation NHKeyInputRequest
-
-- (void)fulfillWithKey:(int)key {
-    *(int *)self.returnPointer = key;
-    [super fulfill];
-}
-
-@end
-
-// ---------------------------------------------------------------------------
-// NHKeyOrMouseInputRequest — private interface + implementation
-// ---------------------------------------------------------------------------
-
-@interface NHKeyOrMouseInputRequest ()
-- (instancetype)initWithReturnPointer:(int *)retPtr
-                                    x:(int16_t *)xp
-                                    y:(int16_t *)yp
-                                  mod:(int *)modp;
-@end
-
-@implementation NHKeyOrMouseInputRequest {
-    int16_t *_xp;
-    int16_t *_yp;
-    int *_modp;
-}
-
-- (instancetype)initWithReturnPointer:(int *)retPtr
-                                    x:(int16_t *)xp
-                                    y:(int16_t *)yp
-                                  mod:(int *)modp {
-    self = [super initWithReturnPointer:retPtr];
-    if (self) {
-        _xp = xp;
-        _yp = yp;
-        _modp = modp;
-    }
-    return self;
-}
-
-- (void)fulfillWithKey:(int)key {
-    *(int *)self.returnPointer = key;
-    [super fulfill];
-}
-
-- (void)fulfillWithMouseX:(int)x y:(int)y modifier:(int)mod {
-    *(int *)self.returnPointer = 0;  // 0 = mouse/position event
-    if (_xp)   *_xp   = (int16_t)x;
-    if (_yp)   *_yp   = (int16_t)y;
-    if (_modp) *_modp = mod;
-    [super fulfill];
-}
-
-@end
 
 // ---------------------------------------------------------------------------
 // NetHackBridge — private interface
 // ---------------------------------------------------------------------------
 
 @interface NetHackBridge ()
-/// Dispatch an output event to the delegate on the main thread.
-/// Non-blocking: the NetHack thread continues immediately.
+/// Dispatch an output event to the delegate on the main thread and wait for
+/// it to complete before returning (preserves ordering between shim calls).
 - (void)dispatchOutput:(void (^)(void))block;
-/// Dispatch a blocking input request to the delegate on the main thread,
-/// then block the NetHack thread until [request fulfill] is called.
-- (void)dispatchInput:(NHInputRequest *)request block:(void (^)(void))block;
+/// Dispatch a blocking input request to the delegate on the main thread.
+/// `block` receives a `done` callback; when the delegate has obtained user
+/// input and wants to unblock the NetHack thread it calls done().
+- (void)dispatchInput:(void (^)(void (^done)(void)))block;
 @end
 
 // ---------------------------------------------------------------------------
@@ -420,14 +266,14 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
             [delegate addMenuItemIn:window
-        accel:(char)ch
-                  groupAccel:(char)gch
-                        attr:attr
-                       color:clr
-                      string:text
-                       flags:itemflags
-                   glyphInfo:glyphinfo
-                  identifier:identifier];
+							  accel:(char)ch
+						 groupAccel:(char)gch
+							   attr:attr
+							  color:clr
+							 string:text
+							  flags:itemflags
+						  glyphInfo:glyphinfo
+						 identifier:identifier];
         }];
 
     } else if (strcmp(name, "shim_end_menu") == 0) {
@@ -468,9 +314,9 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
             [delegate enableStatusField:fieldidx
-                                 name:nameStr
-                               format:fmtStr
-                              enabled:(BOOL)enable];
+								   name:nameStr
+								 format:fmtStr
+								enabled:(BOOL)enable];
         }];
 
     } else if (strcmp(name, "shim_status_update") == 0) {
@@ -499,10 +345,13 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
     } else if (strcmp(name, "shim_nhgetch") == 0) {
         // fmt = "i": int return, no arguments.
         // Blocking input: return a single keypress.
-        NHKeyInputRequest *req = [[NHKeyInputRequest alloc] initWithReturnPointer:ret_ptr];
+        int *retPtr = (int *)ret_ptr;
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
-        [_activeBridge dispatchInput:req block:^{
-            [delegate needsKeyInput:req];
+        [_activeBridge dispatchInput:^(void (^done)(void)) {
+            [delegate needsKeyInput:^(int key) {
+                *retPtr = key;
+                done();
+            }];
         }];
 
     } else if (strcmp(name, "shim_nh_poskey") == 0) {
@@ -511,14 +360,18 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int16_t *xp   = va_arg(args, int16_t *);
         int16_t *yp   = va_arg(args, int16_t *);
         int     *modp = va_arg(args, int *);
-        NHKeyOrMouseInputRequest *req =
-            [[NHKeyOrMouseInputRequest alloc] initWithReturnPointer:ret_ptr
-                                                                  x:xp
-                                                                  y:yp
-                                                                mod:modp];
+        int *retPtr = (int *)ret_ptr;
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
-        [_activeBridge dispatchInput:req block:^{
-            [delegate needsKeyOrMouseInput:req];
+        [_activeBridge dispatchInput:^(void (^done)(void)) {
+            [delegate needsKeyOrMouseInput:^(int key, int x, int y, int mod) {
+                *retPtr = key;
+                if (key == 0) {  // mouse/position event
+                    if (xp)   *xp   = (int16_t)x;
+                    if (yp)   *yp   = (int16_t)y;
+                    if (modp) *modp = mod;
+                }
+                done();
+            }];
         }];
 
     } else if (strcmp(name, "shim_getlin") == 0) {
@@ -526,11 +379,19 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         // Blocking input: ask the user for a line of text.
         const char *query = va_arg(args, const char *);
         char *bufp        = va_arg(args, char *);
-        NHLineInputRequest *req = [[NHLineInputRequest alloc] initWithBuffer:bufp
-                                                                      prompt:@(query)];
+        NSString *promptStr = @(query);
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
-        [_activeBridge dispatchInput:req block:^{
-            [delegate needsLineInput:req];
+        [_activeBridge dispatchInput:^(void (^done)(void)) {
+            [delegate needsLineInput:promptStr completion:^(NSString *response) {
+                if (response) {
+                    strlcpy(bufp, response.UTF8String, BUFSZ);
+                } else {
+                    // nil = cancel: ESC + NUL signals cancellation to NetHack.
+                    bufp[0] = '\033';
+                    bufp[1] = '\0';
+                }
+                done();
+            }];
         }];
 
     } else if (strcmp(name, "shim_yn_function") == 0) {
@@ -699,9 +560,12 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
     dispatch_sync(dispatch_get_main_queue(), block);
 }
 
-- (void)dispatchInput:(NHInputRequest *)request block:(void (^)(void))block {
-    dispatch_sync(dispatch_get_main_queue(), block);
-    [request waitForFulfillment];
+- (void)dispatchInput:(void (^)(void (^)(void)))block {
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        block(^{ dispatch_semaphore_signal(sem); });
+    });
+    dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
 }
 
 @end

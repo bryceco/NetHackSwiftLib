@@ -27,84 +27,13 @@ typedef NS_ENUM(int, NHTextAttribute) {
 
 
 // ---------------------------------------------------------------------------
-// NHInputRequest
-//
-// Created by the library for each blocking callback. The NetHack thread holds
-// this object and waits on it; the delegate receives it on the main thread,
-// arranges for user input, then calls -fulfill to unblock the NetHack thread.
-// ---------------------------------------------------------------------------
-@interface NHInputRequest : NSObject
-
-/// Pointer to the storage where a return value must be written before calling
-/// -fulfill, if the callback has a non-void return type. May be NULL.
-@property (nonatomic, readonly) void * _Nullable returnPointer;
-
-/// Unblock the NetHack thread. Must be called exactly once from the main thread.
-- (void)fulfill;
-
-@end
-
-
-// ---------------------------------------------------------------------------
-// NHLineInputRequest  (getlin)
-//
-// NetHack wants a line of text from the user. The delegate must call
-// -fulfill: with the user's response, or -cancel to send ESC.
-// ---------------------------------------------------------------------------
-@interface NHLineInputRequest : NHInputRequest
-
-/// The prompt to display to the user.
-@property (nonatomic, readonly) NSString *prompt;
-
-/// Write `response` into the buffer and unblock NetHack.
-/// Responses longer than 255 bytes are truncated.
-- (void)fulfill:(NSString *)response;
-
-/// Signal cancellation (writes ESC + NUL into the buffer) and unblock NetHack.
-- (void)cancel;
-
-@end
-
-
-// ---------------------------------------------------------------------------
-// NHKeyInputRequest  (nhgetch)
-//
-// NetHack needs a single keypress. The delegate must call -fulfillWithKey:.
-// ---------------------------------------------------------------------------
-@interface NHKeyInputRequest : NHInputRequest
-
-/// Return `key` to NetHack and unblock.
-- (void)fulfillWithKey:(int)key;
-
-@end
-
-
-// ---------------------------------------------------------------------------
-// NHKeyOrMouseInputRequest  (nh_poskey)
-//
-// NetHack needs a keypress or a map-position click. The delegate must call
-// exactly one of -fulfillWithKey: or -fulfillWithMouseX:y:modifier:.
-// ---------------------------------------------------------------------------
-@interface NHKeyOrMouseInputRequest : NHInputRequest
-
-/// Return a keyboard `key` to NetHack and unblock.
-- (void)fulfillWithKey:(int)key;
-
-/// Return a map-click to NetHack: writes 0 as the key return value and fills
-/// in the x/y/modifier output pointers, then unblocks.
-- (void)fulfillWithMouseX:(int)x y:(int)y modifier:(int)mod;
-
-@end
-
-
-// ---------------------------------------------------------------------------
 // NetHackBridgeDelegate
 //
 // Output callbacks are dispatched synchronously to the main thread (the
 // NetHack thread waits for each to complete before issuing the next shim
 // call, preserving ordering and preventing data races on shared models).
-// Input callbacks additionally block until the delegate calls -fulfill.
-// Failing to call fulfill on an input request will hang the game.
+// Input callbacks additionally block until the delegate calls its completion.
+// Failing to call the completion on an input request will hang the game.
 // ---------------------------------------------------------------------------
 @protocol NetHackBridgeDelegate <NSObject>
 
@@ -232,16 +161,18 @@ accel:(char)accel
 // --- Blocking input ---
 
 /// getlin — NetHack needs a line of text from the user.
-/// Call [request fulfill:responseString] or [request cancel] when done.
-- (void)needsLineInput:(NHLineInputRequest *)request;
+/// Call completion(responseString) to respond, or completion(nil) to cancel.
+- (void)needsLineInput:(NSString *)prompt
+            completion:(void (^)(NSString * _Nullable response))completion;
 
 /// nhgetch — NetHack needs a single keypress.
-/// Call [request fulfillWithKey:keyCode] when done.
-- (void)needsKeyInput:(NHKeyInputRequest *)request;
+/// Call completion(keyCode) when done.
+- (void)needsKeyInput:(void (^)(int key))completion;
 
 /// nh_poskey — NetHack needs a keypress or a map-position click.
-/// Call [request fulfillWithKey:] or [request fulfillWithMouseX:y:modifier:] when done.
-- (void)needsKeyOrMouseInput:(NHKeyOrMouseInputRequest *)request;
+/// For a key event: call completion(key, 0, 0, 0) with key != 0.
+/// For a map click: call completion(0, x, y, modifier).
+- (void)needsKeyOrMouseInput:(void (^)(int key, int x, int y, int mod))completion;
 
 @end
 
