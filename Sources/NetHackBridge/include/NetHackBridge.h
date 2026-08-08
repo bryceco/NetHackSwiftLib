@@ -113,7 +113,7 @@ typedef NS_ENUM(int, NHTextAttribute) {
 /// create_nhwindow — NetHack created a new window of the given type.
 /// The window ID is assigned by the bridge and will be used in subsequent
 /// calls (putstr, curs, display_nhwindow, etc.).
-- (void)createNhwindow:(NHWindowID)window ofType:(NHWindowType)type;
+- (void)createNhwindow:(NHWindowID)window type:(NHWindowType)type;
 
 /// clear_nhwindow — erase the contents of a window without closing it.
 - (void)clearNhwindow:(NHWindowID)window;
@@ -135,11 +135,11 @@ typedef NS_ENUM(int, NHTextAttribute) {
 
 /// curs — move the displayable cursor to (x, y) in the given window.
 /// 1 <= x < cols, 0 <= y < rows.
-- (void)didMoveCursorInWindow:(NHWindowID)window x:(int)x y:(int)y;
+- (void)moveCursorIn:(NHWindowID)window x:(int)x y:(int)y;
 
 /// putstr — print a string with a text attribute into a window.
-- (void)window:(NHWindowID)window
-        putstr:(NSString *)string
+- (void)putStringIn:(NHWindowID)window
+        string:(NSString *)string
      attribute:(NHTextAttribute)attribute;
 
 /// display_file — display a named file (e.g. help text) to the user.
@@ -150,24 +150,24 @@ typedef NS_ENUM(int, NHTextAttribute) {
 /// print_glyph — render one map cell.
 /// glyphInfo and backgroundGlyphInfo are pointers to NetHack glyph_info
 /// structs; they are valid only for the duration of this call.
-- (void)window:(NHWindowID)window
-  printGlyphAtX:(int)x
+- (void)printGlyphIn:(NHWindowID)window
+  x:(int)x
               y:(int)y
       glyphInfo:(const void *)glyphInfo
 backgroundGlyphInfo:(const void *)backgroundGlyphInfo;
 
 /// cliparound — scroll the map so that (x, y) is visible.
-- (void)cliparound:(int)x y:(int)y;
+- (void)clipAround:(int)x y:(int)y;
 
 // --- Menus ---
 
 /// start_menu — begin accumulating items for a new menu in this window.
-- (void)startMenu:(NHWindowID)window behavior:(unsigned long)behavior;
+- (void)startMenuIn:(NHWindowID)window behavior:(unsigned long)behavior;
 
 /// add_menu — append one item to the in-progress menu.
 /// glyphInfo and identifier are opaque NetHack pointers valid for this call only.
-- (void)window:(NHWindowID)window
-addMenuItemWithAccel:(char)accel
+- (void)addMenuItemIn:(NHWindowID)window
+accel:(char)accel
     groupAccel:(char)groupAccel
           attr:(int)attr
          color:(int)color
@@ -177,7 +177,7 @@ addMenuItemWithAccel:(char)accel
     identifier:(const void *)identifier;
 
 /// end_menu — finalise the current menu with an optional prompt string.
-- (void)endMenuInWindow:(NHWindowID)window prompt:(nullable NSString *)prompt;
+- (void)endMenuIn:(NHWindowID)window prompt:(nullable NSString *)prompt;
 
 // --- Status bar ---
 
