@@ -288,12 +288,9 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         // coordination — not yet implemented; will abort if blocking is set.
         int window   = va_arg(args, int);
         int blocking = va_arg(args, int);
-        if (blocking) {
-            assert(0 && "shim_display_nhwindow: blocking=true not yet implemented");
-        }
         id<NetHackBridgeDelegate> delegate = _activeBridge.delegate;
         [_activeBridge dispatchOutput:^{
-            [delegate displayNhwindow:window];
+			[delegate displayNhwindow:window blocking:blocking];
         }];
 
     } else if (strcmp(name, "shim_destroy_nhwindow") == 0) {

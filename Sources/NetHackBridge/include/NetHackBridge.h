@@ -120,7 +120,7 @@ typedef NS_ENUM(int, NHTextAttribute) {
 
 /// display_nhwindow (non-blocking) — make the window visible.
 /// The blocking variant (blocking=true) is not yet implemented in the bridge.
-- (void)displayNhwindow:(NHWindowID)window;
+- (void)displayNhwindow:(NHWindowID)window blocking:(BOOL)blocking;
 
 /// destroy_nhwindow — the window is being closed; free associated resources.
 - (void)destroyNhwindow:(NHWindowID)window;
