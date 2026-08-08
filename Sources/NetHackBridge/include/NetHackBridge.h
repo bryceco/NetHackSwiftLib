@@ -100,29 +100,42 @@ typedef NS_ENUM(int, NHTextAttribute) {
 // ---------------------------------------------------------------------------
 // NetHackBridgeDelegate
 //
-// Output callbacks are dispatched asynchronously to the main thread.
-// Input callbacks are dispatched synchronously: the NetHack thread blocks
-// until the delegate calls the appropriate fulfill method on the request.
-// Failing to call fulfill will hang the game.
+// Output callbacks are dispatched synchronously to the main thread (the
+// NetHack thread waits for each to complete before issuing the next shim
+// call, preserving ordering and preventing data races on shared models).
+// Input callbacks additionally block until the delegate calls -fulfill.
+// Failing to call fulfill on an input request will hang the game.
 // ---------------------------------------------------------------------------
 @class NetHackBridge;
 
 @protocol NetHackBridgeDelegate <NSObject>
 
-// --- Output callbacks ---
+// --- Window lifecycle ---
 
 /// create_nhwindow — NetHack created a new window of the given type.
 /// The window ID is assigned by the bridge and will be used in subsequent
 /// calls (putstr, curs, display_nhwindow, etc.).
 - (void)nethackBridge:(NetHackBridge *)bridge
-      didCreateWindow:(NHWindowID)window
+      createNhwindow:(NHWindowID)window
                ofType:(NHWindowType)type;
 
+/// clear_nhwindow — erase the contents of a window without closing it.
+- (void)nethackBridge:(NetHackBridge *)bridge clearNhwindow:(NHWindowID)window;
+
+/// display_nhwindow (non-blocking) — make the window visible.
+/// The blocking variant (blocking=true) is not yet implemented in the bridge.
+- (void)nethackBridge:(NetHackBridge *)bridge displayNhwindow:(NHWindowID)window;
+
+/// destroy_nhwindow — the window is being closed; free associated resources.
+- (void)nethackBridge:(NetHackBridge *)bridge destroyNhwindow:(NHWindowID)window;
+
+// --- Text output ---
+
 /// raw_print — plain string, typically startup messages or errors.
-- (void)nethackBridge:(NetHackBridge *)bridge didPrintString:(NSString *)string;
+- (void)nethackBridge:(NetHackBridge *)bridge rawPrint:(NSString *)string;
 
 /// raw_print_bold — same as raw_print but displayed in bold/standout.
-- (void)nethackBridge:(NetHackBridge *)bridge didPrintBoldString:(NSString *)string;
+- (void)nethackBridge:(NetHackBridge *)bridge rawPrintBold:(NSString *)string;
 
 /// curs — move the displayable cursor to (x, y) in the given window.
 /// 1 <= x < cols, 0 <= y < rows.
@@ -134,10 +147,110 @@ typedef NS_ENUM(int, NHTextAttribute) {
 /// putstr — print a string with a text attribute into a window.
 - (void)nethackBridge:(NetHackBridge *)bridge
                window:(NHWindowID)window
-         didPutString:(NSString *)string
+			   putstr:(NSString *)string
             attribute:(NHTextAttribute)attribute;
 
-// --- Input callbacks ---
+/// display_file — display a named file (e.g. help text) to the user.
+- (void)nethackBridge:(NetHackBridge *)bridge
+		  displayFile:(NSString *)filename
+              complain:(BOOL)complain;
+
+// --- Map ---
+
+/// print_glyph — render one map cell.
+/// glyphInfo and backgroundGlyphInfo are pointers to NetHack glyph_info
+/// structs; they are valid only for the duration of this call.
+- (void)nethackBridge:(NetHackBridge *)bridge
+               window:(NHWindowID)window
+		printGlyphAtX:(int)x
+                    y:(int)y
+            glyphInfo:(const void *)glyphInfo
+  backgroundGlyphInfo:(const void *)backgroundGlyphInfo;
+
+/// cliparound — scroll the map so that (x, y) is visible.
+- (void)nethackBridge:(NetHackBridge *)bridge cliparound:(int)x y:(int)y;
+
+// --- Menus ---
+
+/// start_menu — begin accumulating items for a new menu in this window.
+- (void)nethackBridge:(NetHackBridge *)bridge
+			startMenu:(NHWindowID)window
+              behavior:(unsigned long)behavior;
+
+/// add_menu — append one item to the in-progress menu.
+/// glyphInfo and identifier are opaque NetHack pointers valid for this call only.
+- (void)nethackBridge:(NetHackBridge *)bridge
+               window:(NHWindowID)window
+ addMenuItemWithAccel:(char)accel
+           groupAccel:(char)groupAccel
+                 attr:(int)attr
+                color:(int)color
+               string:(NSString *)string
+                flags:(unsigned int)flags
+            glyphInfo:(const void *)glyphInfo
+           identifier:(const void *)identifier;
+
+/// end_menu — finalise the current menu with an optional prompt string.
+- (void)nethackBridge:(NetHackBridge *)bridge
+	  endMenuInWindow:(NHWindowID)window
+               prompt:(nullable NSString *)prompt;
+
+// --- Status bar ---
+
+/// status_enablefield — configure which status fields are active and how they
+/// are formatted.
+- (void)nethackBridge:(NetHackBridge *)bridge
+	enableStatusField:(int)fieldIndex
+                 name:(NSString *)name
+               format:(NSString *)format
+              enabled:(BOOL)enabled;
+
+/// status_update — the value of one status field has changed.
+/// ptr is a NetHack genericptr_t valid for this call only.
+/// colorMasks is an array of unsigned longs valid for this call only.
+- (void)nethackBridge:(NetHackBridge *)bridge
+	updateStatusField:(int)fieldIndex
+                  ptr:(const void *)ptr
+               change:(int)change
+              percent:(int)percent
+                color:(int)color
+           colorMasks:(const unsigned long * _Nullable)colorMasks;
+
+// --- Misc output ---
+
+/// update_positionbar — update the optional position-bar widget string.
+- (void)nethackBridge:(NetHackBridge *)bridge updatePositionBar:(NSString *)positionBar;
+
+/// update_inventory — the contents of the player's inventory have changed.
+- (void)nethackBridgeUpdateInventory:(NetHackBridge *)bridge;
+
+/// putmsghistory — replay a previous message into history when restoring a save.
+- (void)nethackBridge:(NetHackBridge *)bridge
+	putMessageHistory:(nullable NSString *)message
+			restoring:(BOOL)restoring;
+
+/// player_selection — NetHack is about to ask the player to choose
+/// character role, race, alignment, and gender.
+- (void)nethackBridgeRequestPlayerSelection:(NetHackBridge *)bridge;
+
+/// init_nhwindows — the windowing system is being initialised.
+- (void)nethackBridgeInitWindows:(NetHackBridge *)bridge;
+
+/// status_init — the status-bar subsystem is being initialised.
+- (void)nethackBridgeInitStatus:(NetHackBridge *)bridge;
+
+/// exit_nhwindows — the windowing system is shutting down.
+- (void)nethackBridge:(NetHackBridge *)bridge exitWindowsWithMessage:(nullable NSString *)message;
+
+/// suspend_nhwindows — the windowing system is being temporarily suspended
+/// (e.g. for a shell-out).
+- (void)nethackBridge:(NetHackBridge *)bridge
+  suspendWindowsWithMessage:(nullable NSString *)message;
+
+/// resume_nhwindows — the windowing system has resumed after suspension.
+- (void)nethackBridgeResumeWindows:(NetHackBridge *)bridge;
+
+// --- Blocking input ---
 
 /// getlin — NetHack needs a line of text from the user.
 /// Call [request fulfill:responseString] or [request cancel] when done.
