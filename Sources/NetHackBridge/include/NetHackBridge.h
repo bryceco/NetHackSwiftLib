@@ -100,7 +100,7 @@ typedef NS_ENUM(int, NHTextAttribute) {
 backgroundGlyphInfo:(const void *)backgroundGlyphInfo;
 
 /// cliparound — scroll the map so that (x, y) is visible.
-- (void)clipAround:(int)x y:(int)y;
+- (void)clipAroundX:(int)x y:(int)y NS_SWIFT_NAME(clipAround(x:y:));
 
 // --- Menus ---
 

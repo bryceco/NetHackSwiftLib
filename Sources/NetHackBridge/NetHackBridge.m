@@ -143,7 +143,8 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
 
         NHWindowType windowType = (NHWindowType)type;
         [_activeBridge dispatchOutput:^{
-            [_activeDelegate createNhwindow:windowID type:windowType];
+            [_activeDelegate createNhwindow:windowID
+									   type:windowType];
         }];
 
     } else if (strcmp(name, "shim_clear_nhwindow") == 0) {
@@ -161,7 +162,8 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int window   = va_arg(args, int);
         int blocking = va_arg(args, int);
         [_activeBridge dispatchOutput:^{
-			[_activeDelegate displayNhwindow:window blocking:blocking];
+			[_activeDelegate displayNhwindow:window
+									blocking:blocking];
         }];
 
     } else if (strcmp(name, "shim_destroy_nhwindow") == 0) {
@@ -178,7 +180,6 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
     } else if (strcmp(name, "shim_raw_print") == 0) {
         // fmt = "vs": void return, one string argument.
         const char *str = va_arg(args, const char *);
-        puts(str);
         NSString *text = @(str);
         [_activeBridge dispatchOutput:^{
             [_activeDelegate rawPrint:text];
@@ -187,7 +188,6 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
     } else if (strcmp(name, "shim_raw_print_bold") == 0) {
         // fmt = "vs": void return, one string argument.
         const char *str = va_arg(args, const char *);
-        puts(str);
         NSString *text = @(str);
         [_activeBridge dispatchOutput:^{
             [_activeDelegate rawPrintBold:text];
@@ -199,7 +199,9 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int x      = va_arg(args, int);
         int y      = va_arg(args, int);
         [_activeBridge dispatchOutput:^{
-            [_activeDelegate moveCursorIn:window x:x y:y];
+            [_activeDelegate moveCursorIn:window
+										x:x
+										y:y];
         }];
 
     } else if (strcmp(name, "shim_putstr") == 0) {
@@ -207,10 +209,11 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int window      = va_arg(args, int);
         int attr        = va_arg(args, int);
         const char *str = va_arg(args, const char *);
-        puts(str);
         NSString *text = @(str);
         [_activeBridge dispatchOutput:^{
-            [_activeDelegate putStringIn:window string:text attribute:(NHTextAttribute)attr];
+            [_activeDelegate putStringIn:window
+								  string:text
+							   attribute:(NHTextAttribute)attr];
         }];
 
     } else if (strcmp(name, "shim_display_file") == 0) {
@@ -219,7 +222,8 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int complain         = va_arg(args, int);
         NSString *file = @(filename);
         [_activeBridge dispatchOutput:^{
-            [_activeDelegate displayFile:file complain:(BOOL)complain];
+            [_activeDelegate displayFile:file
+								complain:(BOOL)complain];
         }];
 
     // -----------------------------------------------------------------------
@@ -238,10 +242,10 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         const void *bkglyphinfo = va_arg(args, const void *);
         [_activeBridge dispatchOutput:^{
             [_activeDelegate printGlyphIn:window
-              x:x
-                          y:y
-                  glyphInfo:glyphinfo
-        backgroundGlyphInfo:bkglyphinfo];
+										x:x
+										y:y
+								glyphInfo:glyphinfo
+					  backgroundGlyphInfo:bkglyphinfo];
         }];
 
     } else if (strcmp(name, "shim_cliparound") == 0) {
@@ -249,7 +253,8 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int x = va_arg(args, int);
         int y = va_arg(args, int);
         [_activeBridge dispatchOutput:^{
-            [_activeDelegate clipAround:x y:y];
+            [_activeDelegate clipAroundX:x
+									   y:y];
         }];
 
     // -----------------------------------------------------------------------
@@ -261,7 +266,8 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int window             = va_arg(args, int);
         unsigned long behavior = va_arg(args, unsigned long);
         [_activeBridge dispatchOutput:^{
-            [_activeDelegate startMenuIn:window behavior:behavior];
+            [_activeDelegate startMenuIn:window
+								behavior:behavior];
         }];
 
     } else if (strcmp(name, "shim_add_menu") == 0) {
@@ -305,7 +311,8 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         const char *prompt = va_arg(args, const char *);
         NSString *promptStr = prompt ? @(prompt) : nil;
         [_activeBridge dispatchOutput:^{
-            [_activeDelegate endMenuIn:window prompt:promptStr];
+            [_activeDelegate endMenuIn:window
+								prompt:promptStr];
         }];
 
     } else if (strcmp(name, "shim_select_menu") == 0) {
@@ -318,7 +325,8 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         void **menuListPtr = va_arg(args, void **);
         int   *retPtr      = (int *)ret_ptr;
         [_activeBridge dispatchInput:^(void (^done)(void)) {
-            [_activeDelegate selectMenuIn:window how:how
+            [_activeDelegate selectMenuIn:window
+									  how:how
                                completion:^(NSArray<NHMenuSelection *> *selections) {
                 if (!selections) {
                     // User cancelled.
@@ -384,11 +392,11 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         const unsigned long *masks   = va_arg(args, const unsigned long *);
         [_activeBridge dispatchOutput:^{
             [_activeDelegate updateStatusField:fldidx
-                                    ptr:ptr
-                                 change:chg
-                                percent:percent
-                                  color:color
-                             colorMasks:masks];
+										   ptr:ptr
+										change:chg
+									   percent:percent
+										 color:color
+									colorMasks:masks];
         }];
 
     // -----------------------------------------------------------------------
@@ -432,7 +440,8 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         char *bufp        = va_arg(args, char *);
         NSString *promptStr = @(query);
         [_activeBridge dispatchInput:^(void (^done)(void)) {
-            [_activeDelegate needsLineInput:promptStr completion:^(NSString *response) {
+            [_activeDelegate needsLineInput:promptStr
+								 completion:^(NSString *response) {
                 if (response) {
                     strlcpy(bufp, response.UTF8String, BUFSZ);
                 } else {
@@ -497,39 +506,49 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
 
     } else if (strcmp(name, "shim_get_nh_event") == 0) {
         // fmt = "v": no-op in virtually all window ports.
+		// not necessary for us
 
     } else if (strcmp(name, "shim_askname") == 0) {
         // fmt = "v": no-op — player name is obtained via getlin.
+		assert(0);
 
     } else if (strcmp(name, "shim_mark_synch") == 0) {
         // fmt = "v": no-op — signal to flush pending output.
+		assert(0);
 
     } else if (strcmp(name, "shim_wait_synch") == 0) {
         // fmt = "v": no-op — synchronisation point.
+		assert(0);
 
     } else if (strcmp(name, "shim_nhbell") == 0) {
         // fmt = "v": no-op — ring the terminal bell.
+		assert(0);
 
     } else if (strcmp(name, "shim_delay_output") == 0) {
         // fmt = "v": no-op — no artificial delays in this port.
+		assert(0);
 
     } else if (strcmp(name, "shim_number_pad") == 0) {
         // fmt = "vi": void return, int state. Ignored.
         (void)va_arg(args, int);
+		assert(0);
 
     } else if (strcmp(name, "shim_change_color") == 0) {
         // fmt = "viii": void return, int color, long rgb, int reverse. Ignored.
         (void)va_arg(args, int);
         (void)va_arg(args, long);
         (void)va_arg(args, int);
+		assert(0);
 
     } else if (strcmp(name, "shim_change_background") == 0) {
         // fmt = "vi": void return, int white_or_black. Ignored.
         (void)va_arg(args, int);
+		assert(0);
 
     } else if (strcmp(name, "shim_preference_update") == 0) {
         // fmt = "vp": void return, const char *pref. Ignored.
         (void)va_arg(args, const void *);
+		assert(0);
 
     } else if (strcmp(name, "shim_update_positionbar") == 0) {
         // fmt = "vs": void return, char *posbar.
@@ -552,7 +571,8 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
         int restoring   = va_arg(args, int);
         NSString *msgStr = msg ? @(msg) : nil;
         [_activeBridge dispatchOutput:^{
-            [_activeDelegate putMessageHistory:msgStr restoring:(BOOL)restoring];
+            [_activeDelegate putMessageHistory:msgStr
+									 restoring:(BOOL)restoring];
         }];
 
     } else if (strcmp(name, "shim_player_selection") == 0) {
