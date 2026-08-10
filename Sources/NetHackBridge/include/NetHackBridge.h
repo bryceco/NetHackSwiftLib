@@ -28,6 +28,26 @@ typedef NS_ENUM(int, NHTextAttribute) {
 
 
 // ---------------------------------------------------------------------------
+// NHEquipItem
+//
+// Represents one entry in the fixed equipment-slot array passed to
+// updateInventory:.  NHEquipSlot is defined in winswift.h (included above).
+// ---------------------------------------------------------------------------
+
+@interface NHEquipItem : NSObject
+@property (nonatomic) NHEquipSlot    slot;
+/// Glyph for the item; glyph.glyph == NO_GLYPH (−1) when the slot is empty.
+@property (nonatomic) nhswift_glyph  glyph;
+@property (nonatomic) BOOL           isCursed;
+@property (nonatomic) BOOL           isBlessed;
+@property (nonatomic) BOOL           bucKnown;
+/// doname() result for the item, or @"" when the slot is empty.
+@property (nonatomic, copy) NSString *name;
+- (instancetype)initWithCSlot:(const nhswift_inven_slot *)slot;
+@end
+
+
+// ---------------------------------------------------------------------------
 // NHMenuSelection
 //
 // Represents one item chosen by the user in response to a selectMenuIn:
@@ -161,8 +181,9 @@ backgroundGlyphInfo:(const void *)backgroundGlyphInfo;
 /// update_positionbar — update the optional position-bar widget string.
 - (void)updatePositionBar:(NSString *)positionBar;
 
-/// update_inventory — the contents of the player's inventory have changed.
-- (void)updateInventory;
+/// update_inventory — worn equipment has changed.
+/// slots is an array of NHSWIFT_SLOT_COUNT items, one per NHEquipSlot value.
+- (void)updateInventory:(NSArray<NHEquipItem *> *)slots;
 
 /// putmsghistory — replay a previous message into history when restoring a save.
 - (void)putMessageHistory:(nullable NSString *)message restoring:(BOOL)restoring;

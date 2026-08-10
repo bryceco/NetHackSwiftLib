@@ -8,6 +8,27 @@ extern void nhswift_set_callbacks(const nhswift_callbacks *cb);
 extern void nhswift_set_paths(const char *hackdir, const char *playground);
 
 // ---------------------------------------------------------------------------
+// NHEquipItem
+// ---------------------------------------------------------------------------
+
+@implementation NHEquipItem
+
+- (instancetype)initWithCSlot:(const nhswift_inven_slot *)slot {
+    self = [super init];
+    if (self) {
+        _slot      = (NHEquipSlot)slot->slot;
+        _glyph     = slot->glyph;
+        _isCursed  = (BOOL)slot->cursed;
+        _isBlessed = (BOOL)slot->blessed;
+        _bucKnown  = (BOOL)slot->bknown;
+        _name      = @(slot->name);
+    }
+    return self;
+}
+
+@end
+
+// ---------------------------------------------------------------------------
 // NHMenuSelection
 // ---------------------------------------------------------------------------
 
@@ -329,10 +350,13 @@ static void cb_preferenceUpdate(const char *pref) {
     (void)pref;  // Ignored.
 }
 
-static void cb_updateInventory(int arg) {
-    (void)arg;
+static void cb_updateInventory(const nhswift_inven_slot *slots, int count) {
+    NSMutableArray<NHEquipItem *> *items = [NSMutableArray arrayWithCapacity:count];
+    for (int i = 0; i < count; i++) {
+        [items addObject:[[NHEquipItem alloc] initWithCSlot:&slots[i]]];
+    }
     [_activeBridge dispatchOutput:^{
-        [_activeDelegate updateInventory];
+        [_activeDelegate updateInventory:items];
     }];
 }
 
