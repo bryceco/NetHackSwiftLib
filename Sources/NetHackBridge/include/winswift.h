@@ -1,0 +1,1 @@
+../../../../NetHack/win/swift/winswift.h

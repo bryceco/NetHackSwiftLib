@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#include "winswift.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -30,13 +31,13 @@ typedef NS_ENUM(int, NHTextAttribute) {
 // NHMenuSelection
 //
 // Represents one item chosen by the user in response to a selectMenuIn:
-// call.  The identifier is an opaque copy of the anything value originally
-// passed to addMenuItemIn:; count is the selection multiplier (-1 = all).
+// call.  itemIndex is the 0-based index originally passed to addMenuItemIn:;
+// count is the selection multiplier (-1 = all).
 // ---------------------------------------------------------------------------
 @interface NHMenuSelection : NSObject
-@property (nonatomic) NSData *identifier;
+@property (nonatomic) NSInteger itemIndex;
 @property (nonatomic) long count;
-- (instancetype)initWithIdentifier:(NSData *)identifier count:(long)count;
+- (instancetype)initWithItemIndex:(NSInteger)itemIndex count:(long)count;
 @end
 
 
@@ -108,16 +109,18 @@ backgroundGlyphInfo:(const void *)backgroundGlyphInfo;
 - (void)startMenuIn:(NHWindowID)window behavior:(unsigned long)behavior;
 
 /// add_menu — append one item to the in-progress menu.
-/// glyphInfo and identifier are opaque NetHack pointers valid for this call only.
+/// itemIndex is a stable 0-based index for this item within the current menu;
+/// return the same index from selectMenuIn: to indicate selection.
+/// glyphInfo is an opaque pointer to nhswift_glyph, valid for this call only.
 - (void)addMenuItemIn:(NHWindowID)window
-accel:(char)accel
-    groupAccel:(char)groupAccel
-          attr:(int)attr
-         color:(int)color
-        string:(NSString *)string
-         flags:(unsigned int)flags
-     glyphInfo:(const void *)glyphInfo
-    identifier:(NSData *)identifier;
+            itemIndex:(NSInteger)itemIndex
+                accel:(char)accel
+           groupAccel:(char)groupAccel
+                 attr:(int)attr
+                color:(int)color
+               string:(NSString *)string
+                flags:(unsigned int)flags
+            glyphInfo:(const void *)glyphInfo;
 
 /// end_menu — finalise the current menu with an optional prompt string.
 - (void)endMenuIn:(NHWindowID)window prompt:(nullable NSString *)prompt;
@@ -139,10 +142,13 @@ accel:(char)accel
                   enabled:(BOOL)enabled;
 
 /// status_update — the value of one status field has changed.
-/// ptr is a NetHack genericptr_t valid for this call only.
+/// For most fields, text holds the preformatted value and condBits is 0.
+/// For the condition field (NHSWIFT_BL_CONDITION), text is nil and condBits
+/// holds the bitmask of active conditions.
 /// colorMasks is an array of unsigned longs valid for this call only.
 - (void)updateStatusField:(int)fieldIndex
-                      ptr:(const void *)ptr
+                     text:(nullable NSString *)text
+                 condBits:(long)condBits
                    change:(int)change
                   percent:(int)percent
                     color:(int)color
@@ -206,9 +212,12 @@ accel:(char)accel
 @property (nonatomic, weak, nullable) id<NetHackBridgeDelegate> delegate;
 
 /// Start NetHack on a background thread and return immediately.
+/// hackdirURL  — directory containing NetHack's data files (nhdat, etc.).
+/// playgroundURL — per-user save/config directory (writable).
 /// `completion` is called on the main thread when the game ends.
-- (void)runWithArguments:(NSArray<NSString *> *)arguments
-              completion:(nullable void (^)(int exitCode))completion;
+- (void)runWithHackdirURL:(NSURL *)hackdirURL
+            playgroundURL:(NSURL *)playgroundURL
+               completion:(nullable void (^)(int exitCode))completion;
 
 @end
 

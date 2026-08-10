@@ -1,32 +1,11 @@
 #import "NetHackBridge.h"
-#include <stdarg.h>
-#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 
-// Forward-declare libnh symbols; resolved at link time from libnh.a.
-typedef void (*shim_callback_t)(const char *name, void *ret_ptr, const char *fmt, ...);
-extern void shim_graphics_set_callback(shim_callback_t cb);
+// Forward-declare libnh entry points; resolved at link time from libnh.a.
 extern int  nhmain(int argc, char *argv[]);
-
-// NetHack's input buffer size (see include/global.h)
-#define BUFSZ 256
-
-// ---------------------------------------------------------------------------
-// Local mirror of NetHack's 'anything' union and 'menu_item' struct.
-// anything is a union of primitives and pointers; it is pointer-sized on all
-// supported platforms (8 bytes on 64-bit).  These definitions must stay in
-// sync with NetHack's include/global.h / include/wintype.h.
-// ---------------------------------------------------------------------------
-typedef union {
-    void *a_void;
-    long  a_long;
-} nh_anything;
-
-typedef struct {
-    long         count;       // -1 = "all"
-    nh_anything  identifier;
-} nh_menu_item;
+extern void nhswift_set_callbacks(const nhswift_callbacks *cb);
+extern void nhswift_set_paths(const char *hackdir, const char *playground);
 
 // ---------------------------------------------------------------------------
 // NHMenuSelection
@@ -34,10 +13,10 @@ typedef struct {
 
 @implementation NHMenuSelection
 
-- (instancetype)initWithIdentifier:(NSData *)identifier count:(long)count {
+- (instancetype)initWithItemIndex:(NSInteger)itemIndex count:(long)count {
     self = [super init];
     if (self) {
-        _identifier = identifier;
+        _itemIndex = itemIndex;
         _count = count;
     }
     return self;
@@ -51,7 +30,7 @@ typedef struct {
 
 @interface NetHackBridge ()
 /// Dispatch an output event to the delegate on the main thread and wait for
-/// it to complete before returning (preserves ordering between shim calls).
+/// it to complete before returning (preserves ordering between callbacks).
 - (void)dispatchOutput:(void (^)(void))block;
 /// Dispatch a blocking input request to the delegate on the main thread.
 /// `block` receives a `done` callback; when the delegate has obtained user
@@ -60,533 +39,399 @@ typedef struct {
 @end
 
 // ---------------------------------------------------------------------------
-// C callback — runs on the NetHack background thread.
+// C callbacks — run on the NetHack background (game) thread.
+// These are installed into nhswift_callbacks and called directly by libnh.
 // ---------------------------------------------------------------------------
 
-static NetHackBridge *_activeBridge = nil;
+static NetHackBridge          *_activeBridge   = nil;
 static id<NetHackBridgeDelegate> _activeDelegate = nil;
 
-static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
+// --- Lifecycle ---
 
-    // Dispatch on window function name.
-    // All names carry the "shim_" prefix from winshim.c's VDECLCB/DECLCB macros.
-    // See vendor/NetHack/doc/window.txt for semantics and argument types.
-    // See vendor/NetHack/win/shim/winshim.c for the exact fmt strings.
-    //
-    // Output (non-blocking):
-    //   [_activeBridge dispatchOutput:^{ ... }];
-    //
-    // Input (blocking):
-    //   [_activeBridge dispatchInput:^(void(^done)(void)){ [_activeDelegate needsFoo:^(...){ done(); }]; }];
-
-    if (false) {
-        // placeholder — keeps the else-if chain well-formed as cases are added
-
-    // -----------------------------------------------------------------------
-    // Initialisation / shutdown
-    // -----------------------------------------------------------------------
-
-    } else if (strcmp(name, "shim_init_nhwindows") == 0) {
-        // fmt = "vpp": void return, int *argcp, char **argv.
-        // argcp and argv are not forwarded — the delegate has no use for them.
-        (void)va_arg(args, void *);  // argcp
-        (void)va_arg(args, void *);  // argv
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate initWindows];
-        }];
-
-    } else if (strcmp(name, "shim_status_init") == 0) {
-        // fmt = "v": void return, no arguments.
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate initStatus];
-        }];
-
-    } else if (strcmp(name, "shim_exit_nhwindows") == 0) {
-        // fmt = "vs": void return, const char *str (may be NULL).
-        const char *str = va_arg(args, const char *);
-        NSString *msg = str ? @(str) : nil;
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate exitWindowsWithMessage:msg];
-        }];
-
-    } else if (strcmp(name, "shim_suspend_nhwindows") == 0) {
-        // fmt = "vs": void return, const char *str.
-        const char *str = va_arg(args, const char *);
-        NSString *msg = str ? @(str) : nil;
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate suspendWindowsWithMessage:msg];
-        }];
-
-    } else if (strcmp(name, "shim_resume_nhwindows") == 0) {
-        // fmt = "v": void return, no arguments.
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate resumeWindows];
-        }];
-
-    // -----------------------------------------------------------------------
-    // Window lifecycle
-    // -----------------------------------------------------------------------
-
-    } else if (strcmp(name, "shim_create_nhwindow") == 0) {
-        // fmt = "ii": int return (winid), int argument (window type).
-        // Allocates a new window ID, writes it to ret_ptr, then notifies
-        // the delegate synchronously so it can set up its UI for this window.
-        // The ID must be written before this callback returns because the shim
-        // reads ret immediately after shim_graphics_callback() returns.
-        int type = va_arg(args, int);
-
-        static int nextWindowID = 1;
-        int windowID = nextWindowID++;
-        *(int *)ret_ptr = windowID;
-
-        NHWindowType windowType = (NHWindowType)type;
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate createNhwindow:windowID
-									   type:windowType];
-        }];
-
-    } else if (strcmp(name, "shim_clear_nhwindow") == 0) {
-        // fmt = "vi": void return, winid.
-        int window = va_arg(args, int);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate clearNhwindow:window];
-        }];
-
-    } else if (strcmp(name, "shim_display_nhwindow") == 0) {
-        // fmt = "vib": void return, winid, boolean blocking.
-        // When blocking=true NetHack expects to wait until the user dismisses
-        // the window. That requires a new request type and window-close
-        // coordination — not yet implemented; will abort if blocking is set.
-        int window   = va_arg(args, int);
-        int blocking = va_arg(args, int);
-        [_activeBridge dispatchOutput:^{
-			[_activeDelegate displayNhwindow:window
-									blocking:blocking];
-        }];
-
-    } else if (strcmp(name, "shim_destroy_nhwindow") == 0) {
-        // fmt = "vi": void return, winid.
-        int window = va_arg(args, int);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate destroyNhwindow:window];
-        }];
-
-    // -----------------------------------------------------------------------
-    // Text output
-    // -----------------------------------------------------------------------
-
-    } else if (strcmp(name, "shim_raw_print") == 0) {
-        // fmt = "vs": void return, one string argument.
-        const char *str = va_arg(args, const char *);
-        NSString *text = @(str);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate rawPrint:text];
-        }];
-
-    } else if (strcmp(name, "shim_raw_print_bold") == 0) {
-        // fmt = "vs": void return, one string argument.
-        const char *str = va_arg(args, const char *);
-        NSString *text = @(str);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate rawPrintBold:text];
-        }];
-
-    } else if (strcmp(name, "shim_curs") == 0) {
-        // fmt = "viii": void return, winid, x (column), y (row).
-        int window = va_arg(args, int);
-        int x      = va_arg(args, int);
-        int y      = va_arg(args, int);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate moveCursorIn:window
-										x:x
-										y:y];
-        }];
-
-    } else if (strcmp(name, "shim_putstr") == 0) {
-        // fmt = "viis": void return, winid, attr, string.
-        int window      = va_arg(args, int);
-        int attr        = va_arg(args, int);
-        const char *str = va_arg(args, const char *);
-        NSString *text = @(str);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate putStringIn:window
-								  string:text
-							   attribute:(NHTextAttribute)attr];
-        }];
-
-    } else if (strcmp(name, "shim_display_file") == 0) {
-        // fmt = "vsb": void return, const char *name, boolean complain.
-        const char *filename = va_arg(args, const char *);
-        int complain         = va_arg(args, int);
-        NSString *file = @(filename);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate displayFile:file
-								complain:(BOOL)complain];
-        }];
-
-    // -----------------------------------------------------------------------
-    // Map
-    // -----------------------------------------------------------------------
-
-    } else if (strcmp(name, "shim_print_glyph") == 0) {
-        // fmt = "vi11pp": void return, winid, coordxy x, coordxy y,
-        //   const glyph_info *glyphinfo, const glyph_info *bkglyphinfo.
-        // coordxy is int16_t and is passed by value; it is promoted to int
-        // in the variadic call. glyphinfo pointers are valid for this call only.
-        int window              = va_arg(args, int);
-        int x                   = va_arg(args, int);   // coordxy promoted to int
-        int y                   = va_arg(args, int);   // coordxy promoted to int
-        const void *glyphinfo   = va_arg(args, const void *);
-        const void *bkglyphinfo = va_arg(args, const void *);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate printGlyphIn:window
-										x:x
-										y:y
-								glyphInfo:glyphinfo
-					  backgroundGlyphInfo:bkglyphinfo];
-        }];
-
-    } else if (strcmp(name, "shim_cliparound") == 0) {
-        // fmt = "vii": void return, int x, int y.
-        int x = va_arg(args, int);
-        int y = va_arg(args, int);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate clipAroundX:x
-									   y:y];
-        }];
-
-    // -----------------------------------------------------------------------
-    // Menus
-    // -----------------------------------------------------------------------
-
-    } else if (strcmp(name, "shim_start_menu") == 0) {
-        // fmt = "vii": void return, winid, unsigned long mbehavior.
-        int window             = va_arg(args, int);
-        unsigned long behavior = va_arg(args, unsigned long);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate startMenuIn:window
-								behavior:behavior];
-        }];
-
-    } else if (strcmp(name, "shim_add_menu") == 0) {
-        // fmt = "vipi00iisi"
-        // winid, glyph_info*, ANY_P*, char ch, char gch, int attr, int clr,
-        // const char *str, unsigned int itemflags.
-        // char args are promoted to int in the variadic call.
-        int window              = va_arg(args, int);
-        const void *glyphinfo   = va_arg(args, const void *);
-        const void *identPtr    = va_arg(args, const void *);
-        int ch                  = va_arg(args, int);   // char promoted
-        int gch                 = va_arg(args, int);   // char promoted
-        int attr                = va_arg(args, int);
-        int clr                 = va_arg(args, int);
-        const char *str         = va_arg(args, const char *);
-        unsigned int itemflags  = va_arg(args, unsigned int);
-        NSString *text = @(str);
-        // Copy the anything identifier now while the pointer is still valid.
-        nh_anything identCopy;
-        if (identPtr) {
-            memcpy(&identCopy, identPtr, sizeof(nh_anything));
-        } else {
-            memset(&identCopy, 0, sizeof(nh_anything));
-        }
-        NSData *identData = [NSData dataWithBytes:&identCopy length:sizeof(nh_anything)];
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate addMenuItemIn:window
-                                     accel:(char)ch
-                                groupAccel:(char)gch
-                                      attr:attr
-                                     color:clr
-                                    string:text
-                                     flags:itemflags
-                                 glyphInfo:glyphinfo
-                                identifier:identData];
-        }];
-
-    } else if (strcmp(name, "shim_end_menu") == 0) {
-        // fmt = "vis": void return, winid, const char *prompt (may be NULL).
-        int window         = va_arg(args, int);
-        const char *prompt = va_arg(args, const char *);
-        NSString *promptStr = prompt ? @(prompt) : nil;
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate endMenuIn:window
-								prompt:promptStr];
-        }];
-
-    } else if (strcmp(name, "shim_select_menu") == 0) {
-        // fmt = "iiip": int return, winid, int how, MENU_ITEM_P **menu_list.
-        // Blocking: presents the previously built menu and waits for the user
-        // to select items.  Returns the count (>= 0) or -1 if cancelled.
-        // The caller (NetHack) is responsible for freeing *menu_list.
-        int    window      = va_arg(args, int);
-        int    how         = va_arg(args, int);
-        void **menuListPtr = va_arg(args, void **);
-        int   *retPtr      = (int *)ret_ptr;
-        [_activeBridge dispatchInput:^(void (^done)(void)) {
-            [_activeDelegate selectMenuIn:window
-									  how:how
-                               completion:^(NSArray<NHMenuSelection *> *selections) {
-                if (!selections) {
-                    // User cancelled.
-                    *retPtr = -1;
-                    *menuListPtr = NULL;
-                } else if (selections.count == 0) {
-                    *retPtr = 0;
-                    *menuListPtr = NULL;
-                } else {
-                    NSUInteger n = selections.count;
-                    nh_menu_item *items = malloc(n * sizeof(nh_menu_item));
-                    for (NSUInteger i = 0; i < n; i++) {
-                        NHMenuSelection *sel = selections[i];
-                        items[i].count = sel.count;
-                        if (sel.identifier.length >= sizeof(nh_anything)) {
-                            [sel.identifier getBytes:&items[i].identifier
-                                              length:sizeof(nh_anything)];
-                        } else {
-                            memset(&items[i].identifier, 0, sizeof(nh_anything));
-                        }
-                    }
-                    *retPtr = (int)n;
-                    *menuListPtr = items;
-                }
-                done();
-            }];
-        }];
-
-    } else if (strcmp(name, "shim_message_menu") == 0) {
-        // fmt = "ciis": char return, char let, int how, const char *mesg.
-        // Tricky: blocking; returns the character selected by the user.
-        // Not yet implemented.
-        assert(0 && "shim_message_menu not yet implemented");
-
-    // -----------------------------------------------------------------------
-    // Status bar
-    // -----------------------------------------------------------------------
-
-    } else if (strcmp(name, "shim_status_enablefield") == 0) {
-        // fmt = "vippb": void return, int fieldidx, const char *nm,
-        //   const char *fmt, boolean enable.
-        int fieldidx        = va_arg(args, int);
-        const char *nm      = va_arg(args, const char *);
-        const char *fmt_str = va_arg(args, const char *);
-        int enable          = va_arg(args, int);
-        NSString *nameStr   = @(nm);
-        NSString *fmtStr    = @(fmt_str);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate enableStatusField:fieldidx
-								   name:nameStr
-								 format:fmtStr
-								enabled:(BOOL)enable];
-        }];
-
-    } else if (strcmp(name, "shim_status_update") == 0) {
-        // fmt = "vipiiip": void return, int fldidx, genericptr_t ptr,
-        //   int chg, int percent, int color, unsigned long *colormasks.
-        int fldidx                   = va_arg(args, int);
-        const void *ptr              = va_arg(args, const void *);
-        int chg                      = va_arg(args, int);
-        int percent                  = va_arg(args, int);
-        int color                    = va_arg(args, int);
-        const unsigned long *masks   = va_arg(args, const unsigned long *);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate updateStatusField:fldidx
-										   ptr:ptr
-										change:chg
-									   percent:percent
-										 color:color
-									colorMasks:masks];
-        }];
-
-    // -----------------------------------------------------------------------
-    // Blocking input
-    // -----------------------------------------------------------------------
-
-    } else if (strcmp(name, "shim_nhgetch") == 0) {
-        // fmt = "i": int return, no arguments.
-        // Blocking input: return a single keypress.
-        int *retPtr = (int *)ret_ptr;
-        [_activeBridge dispatchInput:^(void (^done)(void)) {
-            [_activeDelegate needsKeyInput:^(int key) {
-                *retPtr = key;
-                done();
-            }];
-        }];
-
-    } else if (strcmp(name, "shim_nh_poskey") == 0) {
-        // fmt = "ippp": int return, coordxy *x, coordxy *y, int *mod.
-        // Blocking input: return a keypress (non-zero) or a map-position click (0).
-        int16_t *xp   = va_arg(args, int16_t *);
-        int16_t *yp   = va_arg(args, int16_t *);
-        int     *modp = va_arg(args, int *);
-        int *retPtr = (int *)ret_ptr;
-        [_activeBridge dispatchInput:^(void (^done)(void)) {
-            [_activeDelegate needsKeyOrMouseInput:^(int key, int x, int y, int mod) {
-                *retPtr = key;
-                if (key == 0) {  // mouse/position event
-                    if (xp)   *xp   = (int16_t)x;
-                    if (yp)   *yp   = (int16_t)y;
-                    if (modp) *modp = mod;
-                }
-                done();
-            }];
-        }];
-
-    } else if (strcmp(name, "shim_getlin") == 0) {
-        // fmt = "vsp": void return, const char *query, char *bufp.
-        // Blocking input: ask the user for a line of text.
-        const char *query = va_arg(args, const char *);
-        char *bufp        = va_arg(args, char *);
-        NSString *promptStr = @(query);
-        [_activeBridge dispatchInput:^(void (^done)(void)) {
-            [_activeDelegate needsLineInput:promptStr
-								 completion:^(NSString *response) {
-                if (response) {
-                    strlcpy(bufp, response.UTF8String, BUFSZ);
-                } else {
-                    // nil = cancel: ESC + NUL signals cancellation to NetHack.
-                    bufp[0] = '\033';
-                    bufp[1] = '\0';
-                }
-                done();
-            }];
-        }];
-
-    } else if (strcmp(name, "shim_yn_function") == 0) {
-        // fmt = "css0": char return, const char *query, const char *resp, char def.
-        // Tricky: blocking; returns the character the user chose from resp.
-        // Not yet implemented.
-        assert(0 && "shim_yn_function not yet implemented");
-
-    } else if (strcmp(name, "shim_doprev_message") == 0) {
-        // fmt = "iv": int return, no arguments.
-        // Tricky: blocking; scrolls back through message history.
-        // Not yet implemented.
-        assert(0 && "shim_doprev_message not yet implemented");
-
-    } else if (strcmp(name, "shim_get_ext_cmd") == 0) {
-        // fmt = "iv": int return, no arguments.
-        // Tricky: blocking; returns the index of the extended command chosen.
-        // Not yet implemented.
-        assert(0 && "shim_get_ext_cmd not yet implemented");
-
-    } else if (strcmp(name, "shim_player_selection_or_tty") == 0) {
-        // fmt = "b": boolean return, no arguments.
-        // Tricky: blocking; returns whether the player completed character selection.
-        // Not yet implemented.
-        assert(0 && "shim_player_selection_or_tty not yet implemented");
-
-    } else if (strcmp(name, "shim_ctrl_nhwindow") == 0) {
-        // fmt = "viip": win_request_info * return, winid, int request,
-        //   win_request_info *wri.
-		return 0;
-
-    } else if (strcmp(name, "shim_getmsghistory") == 0) {
-        // fmt = "sb": char * return, boolean init.
-        // Tricky: returns a pointer into a static rotating buffer of message history.
-        // Not yet implemented.
-        assert(0 && "shim_getmsghistory not yet implemented");
-
-    } else if (strcmp(name, "set_shim_font_name") == 0) {
-        // fmt = "2is": short return, winid window_type, char *font_name.
-        // Tricky: non-standard short return value.
-        // Not yet implemented.
-        assert(0 && "set_shim_font_name not yet implemented");
-
-    } else if (strcmp(name, "shim_get_color_string") == 0) {
-        // fmt = "sv": char * return, no arguments.
-        // Tricky: returns a char * (pointer-sized return).
-        // Not yet implemented.
-        assert(0 && "shim_get_color_string not yet implemented");
-
-    // -----------------------------------------------------------------------
-    // Misc / no-ops
-    // -----------------------------------------------------------------------
-
-    } else if (strcmp(name, "shim_get_nh_event") == 0) {
-        // fmt = "v": no-op in virtually all window ports.
-		// not necessary for us
-
-    } else if (strcmp(name, "shim_askname") == 0) {
-        // fmt = "v": no-op — player name is obtained via getlin.
-		assert(0);
-
-    } else if (strcmp(name, "shim_mark_synch") == 0) {
-        // fmt = "v": no-op — signal to flush pending output.
-		assert(0);
-
-    } else if (strcmp(name, "shim_wait_synch") == 0) {
-        // fmt = "v": no-op — synchronisation point.
-		assert(0);
-
-    } else if (strcmp(name, "shim_nhbell") == 0) {
-        // fmt = "v": no-op — ring the terminal bell.
-		assert(0);
-
-    } else if (strcmp(name, "shim_delay_output") == 0) {
-        // fmt = "v": no-op — no artificial delays in this port.
-		assert(0);
-
-    } else if (strcmp(name, "shim_number_pad") == 0) {
-        // fmt = "vi": void return, int state. Ignored.
-        (void)va_arg(args, int);
-		assert(0);
-
-    } else if (strcmp(name, "shim_change_color") == 0) {
-        // fmt = "viii": void return, int color, long rgb, int reverse. Ignored.
-        (void)va_arg(args, int);
-        (void)va_arg(args, long);
-        (void)va_arg(args, int);
-		assert(0);
-
-    } else if (strcmp(name, "shim_change_background") == 0) {
-        // fmt = "vi": void return, int white_or_black. Ignored.
-        (void)va_arg(args, int);
-		assert(0);
-
-    } else if (strcmp(name, "shim_preference_update") == 0) {
-        // fmt = "vp": void return, const char *pref. Ignored.
-        (void)va_arg(args, const void *);
-		assert(0);
-
-    } else if (strcmp(name, "shim_update_positionbar") == 0) {
-        // fmt = "vs": void return, char *posbar.
-        const char *posbar = va_arg(args, const char *);
-        NSString *bar = @(posbar);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate updatePositionBar:bar];
-        }];
-
-    } else if (strcmp(name, "shim_update_inventory") == 0) {
-        // fmt = "vi": void return, int (unused argument).
-        (void)va_arg(args, int);
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate updateInventory];
-        }];
-
-    } else if (strcmp(name, "shim_putmsghistory") == 0) {
-        // fmt = "vsb": void return, const char *msg, boolean restoring.
-        const char *msg = va_arg(args, const char *);
-        int restoring   = va_arg(args, int);
-        NSString *msgStr = msg ? @(msg) : nil;
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate putMessageHistory:msgStr
-									 restoring:(BOOL)restoring];
-        }];
-
-    } else if (strcmp(name, "shim_player_selection") == 0) {
-        // fmt = "v": void return, no arguments.
-        [_activeBridge dispatchOutput:^{
-            [_activeDelegate requestPlayerSelection];
-        }];
-
-    } else {
-        assert(false);
-    }
-
-    va_end(args);
+static void cb_initWindows(int *argcp, char **argv) {
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate initWindows];
+    }];
 }
+
+static void cb_exitWindows(const char *lastgasp) {
+    NSString *msg = lastgasp ? @(lastgasp) : nil;
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate exitWindowsWithMessage:msg];
+    }];
+}
+
+static void cb_suspendWindows(const char *str) {
+    NSString *msg = str ? @(str) : nil;
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate suspendWindowsWithMessage:msg];
+    }];
+}
+
+static void cb_resumeWindows(void) {
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate resumeWindows];
+    }];
+}
+
+// --- Character creation ---
+
+static int cb_playerSelection(void) {
+    // Return 1 to let NetHack run its own built-in selection dialog.
+    // Change to 0 once we populate flags.initrole/initrace/initgend/initalign
+    // ourselves (e.g. via a custom PlayerSelectionView modal).
+    return 1;
+}
+
+static void cb_askName(char *buf, int bufsize) {
+    // Write an empty string so NetHack prompts for the name via getLine.
+    if (buf && bufsize > 0) buf[0] = '\0';
+}
+
+// --- Window lifecycle ---
+
+static int cb_createWindow(int type) {
+    // Assign a stable window ID and notify the delegate synchronously so it
+    // can set up any bookkeeping for this window before the next callback.
+    static int nextWindowID = 1;
+    int windowID = nextWindowID++;
+    NHWindowType windowType = (NHWindowType)type;
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate createNhwindow:windowID type:windowType];
+    }];
+    return windowID;
+}
+
+static void cb_clearWindow(int window) {
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate clearNhwindow:window];
+    }];
+}
+
+static void cb_displayWindow(int window, int blocking) {
+    // When blocking=1, the delegate is expected to show a modal panel
+    // (e.g. via NSApp.runModal).  dispatch_sync keeps the game thread
+    // paused until the delegate returns, which happens after stopModal.
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate displayNhwindow:window blocking:(BOOL)blocking];
+    }];
+}
+
+static void cb_destroyWindow(int window) {
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate destroyNhwindow:window];
+    }];
+}
+
+static void cb_moveCursor(int window, int x, int y) {
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate moveCursorIn:window x:x y:y];
+    }];
+}
+
+static void cb_putString(int window, int attr, const char *str) {
+    NSString *text = str ? @(str) : @"";
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate putStringIn:window
+                              string:text
+                           attribute:(NHTextAttribute)attr];
+    }];
+}
+
+static void cb_displayFile(const char *name, int complain) {
+    NSString *file = name ? @(name) : @"";
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate displayFile:file complain:(BOOL)complain];
+    }];
+}
+
+// --- Map ---
+
+static void cb_printGlyph(int window, int x, int y,
+                           const nhswift_glyph *gi,
+                           const nhswift_glyph *bkgi) {
+    // Pointers are valid only for this call; dispatchOutput is synchronous
+    // so the delegate receives them while they are still live.
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate printGlyphIn:window
+                                    x:x
+                                    y:y
+                            glyphInfo:(const void *)gi
+                  backgroundGlyphInfo:(const void *)bkgi];
+    }];
+}
+
+static void cb_clipAround(int x, int y) {
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate clipAroundX:x y:y];
+    }];
+}
+
+// --- Menus ---
+
+static void cb_startMenu(int window, unsigned long mbehavior) {
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate startMenuIn:window behavior:mbehavior];
+    }];
+}
+
+static void cb_addMenu(int window, int itemIndex, const nhswift_glyph *gi,
+                       int ch, int gch, int attr, int clr,
+                       const char *str, unsigned int itemflags) {
+    NSString *text = str ? @(str) : @"";
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate addMenuItemIn:window
+                             itemIndex:(NSInteger)itemIndex
+                                 accel:(char)ch
+                            groupAccel:(char)gch
+                                  attr:attr
+                                 color:clr
+                                string:text
+                                 flags:itemflags
+                             glyphInfo:(const void *)gi];
+    }];
+}
+
+static void cb_endMenu(int window, const char *prompt) {
+    NSString *promptStr = prompt ? @(prompt) : nil;
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate endMenuIn:window prompt:promptStr];
+    }];
+}
+
+static int cb_selectMenu(int window, int how,
+                         int *out_indices, long *out_counts, int max) {
+    __block int result = NHSWIFT_MENU_CANCELLED;
+    [_activeBridge dispatchInput:^(void (^done)(void)) {
+        [_activeDelegate selectMenuIn:window
+                                  how:how
+                           completion:^(NSArray<NHMenuSelection *> *selections) {
+            if (!selections) {
+                result = NHSWIFT_MENU_CANCELLED;
+            } else {
+                NSInteger n = (NSInteger)selections.count;
+                if (n > (NSInteger)max) n = (NSInteger)max;
+                for (NSInteger i = 0; i < n; i++) {
+                    if (out_indices) out_indices[i] = (int)selections[i].itemIndex;
+                    if (out_counts)  out_counts[i]  = selections[i].count;
+                }
+                result = (int)n;
+            }
+            done();
+        }];
+    }];
+    return result;
+}
+
+static int cb_messageMenu(int let, int how, const char *mesg) {
+    // Not handled; return 0 so the library falls back to its default.
+    (void)let; (void)how; (void)mesg;
+    return 0;
+}
+
+// --- Input ---
+
+static int cb_getChar(void) {
+    __block int result = 0;
+    [_activeBridge dispatchInput:^(void (^done)(void)) {
+        [_activeDelegate needsKeyInput:^(int key) {
+            result = key;
+            done();
+        }];
+    }];
+    return result;
+}
+
+static int cb_posKey(int *x, int *y, int *mod) {
+    __block int result = 0;
+    [_activeBridge dispatchInput:^(void (^done)(void)) {
+        [_activeDelegate needsKeyOrMouseInput:^(int key, int mx, int my, int mmod) {
+            result = key;
+            if (key == 0) {   // map-position click
+                if (x)   *x   = mx;
+                if (y)   *y   = my;
+                if (mod) *mod = mmod;
+            }
+            done();
+        }];
+    }];
+    return result;
+}
+
+static int cb_ynFunction(const char *query, const char *resp, int def) {
+    // Not yet implemented; return the default character.
+    (void)query; (void)resp;
+    return def;
+}
+
+static void cb_getLine(const char *query, char *buf, int bufsize) {
+    NSString *promptStr = query ? @(query) : @"";
+    [_activeBridge dispatchInput:^(void (^done)(void)) {
+        [_activeDelegate needsLineInput:promptStr
+                             completion:^(NSString *response) {
+            if (response) {
+                strlcpy(buf, response.UTF8String, (size_t)bufsize);
+            } else {
+                // nil = cancel; ESC + NUL signals cancellation to NetHack.
+                if (bufsize > 1) { buf[0] = '\033'; buf[1] = '\0'; }
+            }
+            done();
+        }];
+    }];
+}
+
+static int cb_getExtCmd(void) {
+    // Not yet implemented.
+    return -1;
+}
+
+static int cb_prevMessage(void) {
+    // Not yet implemented.
+    return 0;
+}
+
+// --- Misc / no-ops ---
+
+static void cb_getEvent(void)    {}
+static void cb_markSynch(void)   {}
+static void cb_waitSynch(void)   {}
+static void cb_delayOutput(void) {}
+static void cb_bell(void)        {}
+
+static void cb_rawPrint(const char *str) {
+    NSString *text = str ? @(str) : @"";
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate rawPrint:text];
+    }];
+}
+
+static void cb_rawPrintBold(const char *str) {
+    NSString *text = str ? @(str) : @"";
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate rawPrintBold:text];
+    }];
+}
+
+static void cb_preferenceUpdate(const char *pref) {
+    (void)pref;  // Ignored.
+}
+
+static void cb_updateInventory(int arg) {
+    (void)arg;
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate updateInventory];
+    }];
+}
+
+static void cb_updatePositionBar(const char *posbar) {
+    NSString *bar = posbar ? @(posbar) : @"";
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate updatePositionBar:bar];
+    }];
+}
+
+// --- Message history ---
+
+static int cb_getMsgHistory(int init, char *buf, int bufsize) {
+    (void)init; (void)buf; (void)bufsize;
+    // No message history to save.
+    return 0;
+}
+
+static void cb_putMsgHistory(const char *msg, int restoring) {
+    NSString *msgStr = msg ? @(msg) : nil;
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate putMessageHistory:msgStr restoring:(BOOL)restoring];
+    }];
+}
+
+// --- Status ---
+
+static void cb_statusInit(void) {
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate initStatus];
+    }];
+}
+
+static void cb_statusEnableField(int fieldidx, const char *nm,
+                                 const char *fmt, int enable) {
+    NSString *nameStr = nm  ? @(nm)  : @"";
+    NSString *fmtStr  = fmt ? @(fmt) : @"";
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate enableStatusField:fieldidx
+                                      name:nameStr
+                                    format:fmtStr
+                                   enabled:(BOOL)enable];
+    }];
+}
+
+static void cb_statusUpdate(int fldidx, const char *text, long condbits,
+                            int chg, int percent, int color,
+                            const unsigned long *colormasks) {
+    // text and colormasks are valid only for this call; dispatchOutput is
+    // synchronous so the delegate receives them while they are still live.
+    NSString *textStr = text ? @(text) : nil;
+    [_activeBridge dispatchOutput:^{
+        [_activeDelegate updateStatusField:fldidx
+                                      text:textStr
+                                  condBits:condbits
+                                    change:chg
+                                   percent:percent
+                                     color:color
+                                colorMasks:colormasks];
+    }];
+}
+
+// ---------------------------------------------------------------------------
+// Callback table
+// ---------------------------------------------------------------------------
+
+static const nhswift_callbacks kBridgeCallbacks = {
+    .initWindows       = cb_initWindows,
+    .exitWindows       = cb_exitWindows,
+    .suspendWindows    = cb_suspendWindows,
+    .resumeWindows     = cb_resumeWindows,
+    .playerSelection   = cb_playerSelection,
+    .askName           = cb_askName,
+    .createWindow      = cb_createWindow,
+    .clearWindow       = cb_clearWindow,
+    .displayWindow     = cb_displayWindow,
+    .destroyWindow     = cb_destroyWindow,
+    .moveCursor        = cb_moveCursor,
+    .putString         = cb_putString,
+    .displayFile       = cb_displayFile,
+    .printGlyph        = cb_printGlyph,
+    .clipAround        = cb_clipAround,
+    .startMenu         = cb_startMenu,
+    .addMenu           = cb_addMenu,
+    .endMenu           = cb_endMenu,
+    .selectMenu        = cb_selectMenu,
+    .messageMenu       = cb_messageMenu,
+    .getChar           = cb_getChar,
+    .posKey            = cb_posKey,
+    .ynFunction        = cb_ynFunction,
+    .getLine           = cb_getLine,
+    .getExtCmd         = cb_getExtCmd,
+    .prevMessage       = cb_prevMessage,
+    .numberPad         = NULL,       // no-op default from winswift.c
+    .getEvent          = cb_getEvent,
+    .markSynch         = cb_markSynch,
+    .waitSynch         = cb_waitSynch,
+    .delayOutput       = cb_delayOutput,
+    .bell              = cb_bell,
+    .rawPrint          = cb_rawPrint,
+    .rawPrintBold      = cb_rawPrintBold,
+    .preferenceUpdate  = cb_preferenceUpdate,
+    .updateInventory   = cb_updateInventory,
+    .updatePositionBar = cb_updatePositionBar,
+    .getMsgHistory     = cb_getMsgHistory,
+    .putMsgHistory     = cb_putMsgHistory,
+    .statusInit        = cb_statusInit,
+    .statusEnableField = cb_statusEnableField,
+    .statusUpdate      = cb_statusUpdate,
+    .changeColor       = NULL,       // unused unless built with CHANGE_COLOR
+    .getColorString    = NULL,       // unused unless built with CHANGE_COLOR
+};
 
 // ---------------------------------------------------------------------------
 // NetHackBridge
@@ -594,24 +439,29 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
 
 @implementation NetHackBridge
 
-- (void)runWithArguments:(NSArray<NSString *> *)arguments
-              completion:(nullable void (^)(int))completion {
-    _activeBridge = self;
+- (void)runWithHackdirURL:(NSURL *)hackdirURL
+            playgroundURL:(NSURL *)playgroundURL
+               completion:(nullable void (^)(int))completion {
+    _activeBridge   = self;
     _activeDelegate = self.delegate;
-    shim_graphics_set_callback(nethackCallback);
+    nhswift_set_paths(hackdirURL.fileSystemRepresentation,
+                      playgroundURL.fileSystemRepresentation);
+    nhswift_set_callbacks(&kBridgeCallbacks);
 
-    int argc = (int)arguments.count;
-    char **argv = (char **)malloc((size_t)argc * sizeof(char *));
-    for (int i = 0; i < argc; i++) {
-        argv[i] = strdup(arguments[i].UTF8String);
-    }
+	// nhmain takes argv[] but we have no additional arguments to pass now
+	// that paths are set via nhswift_set_paths.
+	int argc = 1;
+	char *progname = strdup("nethack");
+	char **argv = malloc(2 * sizeof(char *));
+	argv[0] = progname;
+	argv[1] = NULL;
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         int result = nhmain(argc, argv);
-
-        for (int i = 0; i < argc; i++) free(argv[i]);
+        free(argv[0]);
         free(argv);
-        _activeBridge = nil;
+
+        _activeBridge   = nil;
         _activeDelegate = nil;
 
         if (completion) {
@@ -622,9 +472,8 @@ static void nethackCallback(const char *name, void *ret_ptr, const char *fmt, ..
 
 - (void)dispatchOutput:(void (^)(void))block {
     // Use dispatch_sync so each output callback fully completes before the
-    // NetHack thread issues the next shim call. This preserves ordering and
-    // prevents races where a later callback (e.g. start_menu) runs before the
-    // delegate has finished processing the preceding one (e.g. create_nhwindow).
+    // NetHack thread issues the next one.  This preserves ordering and
+    // prevents races on shared model objects.
     dispatch_sync(dispatch_get_main_queue(), block);
 }
 
