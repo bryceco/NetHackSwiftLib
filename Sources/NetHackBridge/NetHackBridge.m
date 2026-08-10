@@ -13,10 +13,10 @@ extern void nhswift_set_paths(const char *hackdir, const char *playground);
 
 @implementation NHMenuSelection
 
-- (instancetype)initWithItemIndex:(NSInteger)itemIndex count:(long)count {
+- (instancetype)initWithIdentifier:(uintptr_t)identifier count:(long)count {
     self = [super init];
     if (self) {
-        _itemIndex = itemIndex;
+        _identifier = identifier;
         _count = count;
     }
     return self;
@@ -29,6 +29,10 @@ extern void nhswift_set_paths(const char *hackdir, const char *playground);
 // ---------------------------------------------------------------------------
 
 @interface NetHackBridge ()
+/// Filesystem paths stored from runWithHackdirURL:; used by cb_initWindows.
+/// Both paths are guaranteed to end with '/'.
+@property (nonatomic, copy) NSString *hackdirPath;
+@property (nonatomic, copy) NSString *playgroundPath;
 /// Dispatch an output event to the delegate on the main thread and wait for
 /// it to complete before returning (preserves ordering between callbacks).
 - (void)dispatchOutput:(void (^)(void))block;
@@ -49,6 +53,9 @@ static id<NetHackBridgeDelegate> _activeDelegate = nil;
 // --- Lifecycle ---
 
 static void cb_initWindows(int *argcp, char **argv) {
+    // Set paths on the NetHack thread, before the delegate sees initWindows.
+    nhswift_set_paths(_activeBridge.hackdirPath.fileSystemRepresentation,
+                      _activeBridge.playgroundPath.fileSystemRepresentation);
     [_activeBridge dispatchOutput:^{
         [_activeDelegate initWindows];
     }];
@@ -175,20 +182,21 @@ static void cb_startMenu(int window, unsigned long mbehavior) {
     }];
 }
 
-static void cb_addMenu(int window, int itemIndex, const nhswift_glyph *gi,
+static void cb_addMenu(int window, const nhswift_glyph *gi,
                        int ch, int gch, int attr, int clr,
-                       const char *str, unsigned int itemflags) {
+                       const char *str, unsigned int itemflags,
+                       uintptr_t identifier) {
     NSString *text = str ? @(str) : @"";
     [_activeBridge dispatchOutput:^{
         [_activeDelegate addMenuItemIn:window
-                             itemIndex:(NSInteger)itemIndex
                                  accel:(char)ch
                             groupAccel:(char)gch
                                   attr:attr
                                  color:clr
                                 string:text
                                  flags:itemflags
-                             glyphInfo:(const void *)gi];
+                             glyphInfo:(const void *)gi
+                            identifier:identifier];
     }];
 }
 
@@ -200,7 +208,7 @@ static void cb_endMenu(int window, const char *prompt) {
 }
 
 static int cb_selectMenu(int window, int how,
-                         int *out_indices, long *out_counts, int max) {
+                         nhswift_menu_item **out_items) {
     __block int result = NHSWIFT_MENU_CANCELLED;
     [_activeBridge dispatchInput:^(void (^done)(void)) {
         [_activeDelegate selectMenuIn:window
@@ -210,10 +218,15 @@ static int cb_selectMenu(int window, int how,
                 result = NHSWIFT_MENU_CANCELLED;
             } else {
                 NSInteger n = (NSInteger)selections.count;
-                if (n > (NSInteger)max) n = (NSInteger)max;
-                for (NSInteger i = 0; i < n; i++) {
-                    if (out_indices) out_indices[i] = (int)selections[i].itemIndex;
-                    if (out_counts)  out_counts[i]  = selections[i].count;
+                if (n > 0 && out_items) {
+                    nhswift_menu_item *items = (nhswift_menu_item *)
+                        malloc((size_t)n * sizeof(nhswift_menu_item));
+                    for (NSInteger i = 0; i < n; i++) {
+                        items[i].identifier = selections[i].identifier;
+                        items[i].count      = selections[i].count;
+                        items[i].itemflags  = 0;
+                    }
+                    *out_items = items;
                 }
                 result = (int)n;
             }
@@ -354,7 +367,8 @@ static void cb_statusInit(void) {
 }
 
 static void cb_statusEnableField(int fieldidx, const char *nm,
-                                 const char *fmt, int enable) {
+                                 const char *fmt, int enable)
+{
     NSString *nameStr = nm  ? @(nm)  : @"";
     NSString *fmtStr  = fmt ? @(fmt) : @"";
     [_activeBridge dispatchOutput:^{
@@ -367,7 +381,8 @@ static void cb_statusEnableField(int fieldidx, const char *nm,
 
 static void cb_statusUpdate(int fldidx, const char *text, long condbits,
                             int chg, int percent, int color,
-                            const unsigned long *colormasks) {
+                            const unsigned long *colormasks)
+{
     // text and colormasks are valid only for this call; dispatchOutput is
     // synchronous so the delegate receives them while they are still live.
     NSString *textStr = text ? @(text) : nil;
@@ -441,15 +456,20 @@ static const nhswift_callbacks kBridgeCallbacks = {
 
 - (void)runWithHackdirURL:(NSURL *)hackdirURL
             playgroundURL:(NSURL *)playgroundURL
-               completion:(nullable void (^)(int))completion {
+               completion:(nullable void (^)(int))completion
+{
+    NSString *hackdir    = hackdirURL.path;
+    NSString *playground = playgroundURL.path;
+    if (![hackdir hasSuffix:@"/"])    hackdir    = [hackdir    stringByAppendingString:@"/"];
+    if (![playground hasSuffix:@"/"]) playground = [playground stringByAppendingString:@"/"];
+    self.hackdirPath    = hackdir;
+    self.playgroundPath = playground;
     _activeBridge   = self;
     _activeDelegate = self.delegate;
-    nhswift_set_paths(hackdirURL.fileSystemRepresentation,
-                      playgroundURL.fileSystemRepresentation);
     nhswift_set_callbacks(&kBridgeCallbacks);
 
 	// nhmain takes argv[] but we have no additional arguments to pass now
-	// that paths are set via nhswift_set_paths.
+	// that paths are set via nhswift_set_paths (called inside cb_initWindows).
 	int argc = 1;
 	char *progname = strdup("nethack");
 	char **argv = malloc(2 * sizeof(char *));

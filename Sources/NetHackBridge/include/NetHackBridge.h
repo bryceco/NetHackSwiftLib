@@ -31,13 +31,15 @@ typedef NS_ENUM(int, NHTextAttribute) {
 // NHMenuSelection
 //
 // Represents one item chosen by the user in response to a selectMenuIn:
-// call.  itemIndex is the 0-based index originally passed to addMenuItemIn:;
+// call.  identifier is the anything value originally passed to addMenuItemIn:;
 // count is the selection multiplier (-1 = all).
 // ---------------------------------------------------------------------------
 @interface NHMenuSelection : NSObject
-@property (nonatomic) NSInteger itemIndex;
+/// The anything value for this item, as passed to addMenuItemIn:identifier:.
+/// winswift.c reinterprets this back to an anything union on return.
+@property (nonatomic) uintptr_t identifier;
 @property (nonatomic) long count;
-- (instancetype)initWithItemIndex:(NSInteger)itemIndex count:(long)count;
+- (instancetype)initWithIdentifier:(uintptr_t)identifier count:(long)count;
 @end
 
 
@@ -109,18 +111,18 @@ backgroundGlyphInfo:(const void *)backgroundGlyphInfo;
 - (void)startMenuIn:(NHWindowID)window behavior:(unsigned long)behavior;
 
 /// add_menu — append one item to the in-progress menu.
-/// itemIndex is a stable 0-based index for this item within the current menu;
-/// return the same index from selectMenuIn: to indicate selection.
+/// identifier is the anything value for this item (reinterpreted as uintptr_t);
+/// return the same value from selectMenuIn: to indicate selection.
 /// glyphInfo is an opaque pointer to nhswift_glyph, valid for this call only.
 - (void)addMenuItemIn:(NHWindowID)window
-            itemIndex:(NSInteger)itemIndex
                 accel:(char)accel
            groupAccel:(char)groupAccel
                  attr:(int)attr
                 color:(int)color
                string:(NSString *)string
                 flags:(unsigned int)flags
-            glyphInfo:(const void *)glyphInfo;
+            glyphInfo:(const void *)glyphInfo
+           identifier:(uintptr_t)identifier;
 
 /// end_menu — finalise the current menu with an optional prompt string.
 - (void)endMenuIn:(NHWindowID)window prompt:(nullable NSString *)prompt;
