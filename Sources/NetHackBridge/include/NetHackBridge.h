@@ -119,8 +119,8 @@ typedef NS_ENUM(int, NHTextAttribute) {
 - (void)printGlyphIn:(NHWindowID)window
   x:(int)x
               y:(int)y
-      glyphInfo:(const void *)glyphInfo
-backgroundGlyphInfo:(const void *)backgroundGlyphInfo;
+      glyphInfo:(const nhswift_glyph *)glyphInfo
+backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
 
 /// cliparound — scroll the map so that (x, y) is visible.
 - (void)clipAroundX:(int)x y:(int)y NS_SWIFT_NAME(clipAround(x:y:));

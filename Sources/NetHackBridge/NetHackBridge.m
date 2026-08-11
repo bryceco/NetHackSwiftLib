@@ -184,8 +184,8 @@ static void cb_printGlyph(int window, int x, int y,
         [_activeDelegate printGlyphIn:window
                                     x:x
                                     y:y
-                            glyphInfo:(const void *)gi
-                  backgroundGlyphInfo:(const void *)bkgi];
+                            glyphInfo:gi
+                  backgroundGlyphInfo:bkgi];
     }];
 }
 
