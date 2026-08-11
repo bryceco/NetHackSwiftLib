@@ -218,23 +218,23 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
 
 /// getlin — NetHack needs a line of text from the user.
 /// Call completion(responseString) to respond, or completion(nil) to cancel.
-- (void)needsLineInput:(NSString *)prompt
+- (void)needLineInput:(NSString *)prompt
             completion:(void (^)(NSString * _Nullable response))completion;
 
 /// nhgetch — NetHack needs a single keypress.
 /// Call completion(keyCode) when done.
-- (void)needsKeyInput:(void (^)(int key))completion;
+- (void)needKeyInput:(void (^)(int key))completion;
 
 /// nh_poskey — NetHack needs a keypress or a map-position click.
 /// For a key event: call completion(key, 0, 0, 0) with key != 0.
 /// For a map click: call completion(0, x, y, modifier).
-- (void)needsKeyOrMouseInput:(void (^)(int key, int x, int y, int mod))completion;
+- (void)needKeyOrMouseInput:(void (^)(int key, int x, int y, int mod))completion;
 
 /// yn_function — NetHack is asking a yes/no (or multi-choice) question.
 /// query: the prompt (e.g. "Really quit?"); responses: the valid response
 /// characters (e.g. "ynq"); defaultResponse: character returned for Enter.
 /// Call completion(choice) with the chosen character code.
-- (void)needsYnInput:(NSString *)query
+- (void)needYnInput:(NSString *)query
            responses:(NSString *)responses
      defaultResponse:(int)defaultResponse
           completion:(void (^)(int choice))completion;

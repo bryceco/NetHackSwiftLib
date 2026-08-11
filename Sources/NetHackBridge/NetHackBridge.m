@@ -268,7 +268,7 @@ static int cb_messageMenu(int let, int how, const char *mesg) {
 static int cb_getChar(void) {
     __block int result = 0;
     [_activeBridge dispatchInput:^(void (^done)(void)) {
-        [_activeDelegate needsKeyInput:^(int key) {
+        [_activeDelegate needKeyInput:^(int key) {
             result = key;
             done();
         }];
@@ -279,7 +279,7 @@ static int cb_getChar(void) {
 static int cb_posKey(int *x, int *y, int *mod) {
     __block int result = 0;
     [_activeBridge dispatchInput:^(void (^done)(void)) {
-        [_activeDelegate needsKeyOrMouseInput:^(int key, int mx, int my, int mmod) {
+        [_activeDelegate needKeyOrMouseInput:^(int key, int mx, int my, int mmod) {
             result = key;
             if (key == 0) {   // map-position click
                 if (x)   *x   = mx;
@@ -297,7 +297,7 @@ static int cb_ynFunction(const char *query, const char *resp, int def) {
     NSString *respStr  = resp  ? @(resp)  : @"";
     __block int result = def;
     [_activeBridge dispatchInput:^(void (^done)(void)) {
-        [_activeDelegate needsYnInput:queryStr
+        [_activeDelegate needYnInput:queryStr
                             responses:respStr
                       defaultResponse:def
                            completion:^(int choice) {
@@ -311,7 +311,7 @@ static int cb_ynFunction(const char *query, const char *resp, int def) {
 static void cb_getLine(const char *query, char *buf, int bufsize) {
     NSString *promptStr = query ? @(query) : @"";
     [_activeBridge dispatchInput:^(void (^done)(void)) {
-        [_activeDelegate needsLineInput:promptStr
+        [_activeDelegate needLineInput:promptStr
                              completion:^(NSString *response) {
             if (response) {
                 strlcpy(buf, response.UTF8String, (size_t)bufsize);
