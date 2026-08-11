@@ -258,7 +258,7 @@ static int cb_selectMenu(int window, int how,
 }
 
 static int cb_messageMenu(int let, int how, const char *mesg) {
-    // Not handled; return 0 so the library falls back to its default.
+    NSLog(@"cb_messageMenu needs a delegate function (let=%d how=%d mesg=%s)", let, how, mesg ? mesg : "");
     (void)let; (void)how; (void)mesg;
     return 0;
 }
@@ -293,9 +293,19 @@ static int cb_posKey(int *x, int *y, int *mod) {
 }
 
 static int cb_ynFunction(const char *query, const char *resp, int def) {
-    // Not yet implemented; return the default character.
-    (void)query; (void)resp;
-    return def;
+    NSString *queryStr = query ? @(query) : @"";
+    NSString *respStr  = resp  ? @(resp)  : @"";
+    __block int result = def;
+    [_activeBridge dispatchInput:^(void (^done)(void)) {
+        [_activeDelegate needsYnInput:queryStr
+                            responses:respStr
+                      defaultResponse:def
+                           completion:^(int choice) {
+            result = choice;
+            done();
+        }];
+    }];
+    return result;
 }
 
 static void cb_getLine(const char *query, char *buf, int bufsize) {
@@ -315,12 +325,12 @@ static void cb_getLine(const char *query, char *buf, int bufsize) {
 }
 
 static int cb_getExtCmd(void) {
-    // Not yet implemented.
+    NSLog(@"cb_getExtCmd needs a delegate function");
     return -1;
 }
 
 static int cb_prevMessage(void) {
-    // Not yet implemented.
+    NSLog(@"cb_prevMessage needs a delegate function");
     return 0;
 }
 

@@ -15,6 +15,12 @@ typedef NS_ENUM(int, NHWindowType) {
     NHWindowTypeText    = 5,  ///< Full-screen help / text display.
 };
 
+/// Mouse button identifiers for nh_poskey() mod parameter.
+typedef NS_ENUM(int, NHMouseButton) {
+    NHMouseButtonLeft  = 1,  ///< Primary (left) button — CLICK_1.
+    NHMouseButtonRight = 2,  ///< Secondary (right) button — CLICK_2.
+};
+
 /// Text-rendering attribute flags passed to putstr().
 typedef NS_ENUM(int, NHTextAttribute) {
     NHTextAttributeNone      = 0,
@@ -223,6 +229,15 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
 /// For a key event: call completion(key, 0, 0, 0) with key != 0.
 /// For a map click: call completion(0, x, y, modifier).
 - (void)needsKeyOrMouseInput:(void (^)(int key, int x, int y, int mod))completion;
+
+/// yn_function — NetHack is asking a yes/no (or multi-choice) question.
+/// query: the prompt (e.g. "Really quit?"); responses: the valid response
+/// characters (e.g. "ynq"); defaultResponse: character returned for Enter.
+/// Call completion(choice) with the chosen character code.
+- (void)needsYnInput:(NSString *)query
+           responses:(NSString *)responses
+     defaultResponse:(int)defaultResponse
+          completion:(void (^)(int choice))completion;
 
 @end
 
