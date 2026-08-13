@@ -130,6 +130,8 @@ static int cb_createWindow(int type) {
     return windowID;
 }
 
+static void flushPendingGlyphs(void);  // defined below, after the batch struct
+
 static void cb_clearWindow(int window) {
     [_activeBridge dispatchOutput:^{
         [_activeDelegate clearNhwindow:window];
@@ -137,6 +139,8 @@ static void cb_clearWindow(int window) {
 }
 
 static void cb_displayWindow(int window, int blocking) {
+    // Flush any printGlyph calls that were batched since the last displayWindow.
+    flushPendingGlyphs();
     // When blocking=1, the delegate is expected to show a modal panel
     // (e.g. via NSApp.runModal).  dispatch_sync keeps the game thread
     // paused until the delegate returns, which happens after stopModal.
@@ -175,18 +179,48 @@ static void cb_displayFile(const char *name, int complain) {
 
 // --- Map ---
 
+// Glyph batch accumulator — filled on the game thread, flushed once per
+// cb_displayWindow call via a single dispatch_sync.  Never accessed from
+// the main thread while the game thread is running, so no lock is needed.
+typedef struct {
+    int window, x, y;
+    nhswift_glyph gi, bkgi;
+} PendingGlyph;
+
+static PendingGlyph *sPendingGlyphs    = NULL;
+static int           sPendingGlyphCount = 0;
+static int           sPendingGlyphCap   = 0;
+
+static void flushPendingGlyphs(void) {
+    if (sPendingGlyphCount == 0) return;
+    int count        = sPendingGlyphCount;
+    PendingGlyph *batch = sPendingGlyphs;
+    sPendingGlyphs    = NULL;
+    sPendingGlyphCount = 0;
+    sPendingGlyphCap   = 0;
+    [_activeBridge dispatchOutput:^{
+        for (int i = 0; i < count; i++) {
+            [_activeDelegate printGlyphIn:batch[i].window
+                                        x:batch[i].x
+                                        y:batch[i].y
+                                glyphInfo:&batch[i].gi
+                      backgroundGlyphInfo:&batch[i].bkgi];
+        }
+        free(batch);
+    }];
+}
+
 static void cb_printGlyph(int window, int x, int y,
                            const nhswift_glyph *gi,
                            const nhswift_glyph *bkgi) {
-    // Pointers are valid only for this call; dispatchOutput is synchronous
-    // so the delegate receives them while they are still live.
-    [_activeBridge dispatchOutput:^{
-        [_activeDelegate printGlyphIn:window
-                                    x:x
-                                    y:y
-                            glyphInfo:gi
-                  backgroundGlyphInfo:bkgi];
-    }];
+    // Accumulate on the game thread; dispatched to main thread in bulk by
+    // cb_displayWindow.  This avoids a dispatch_sync round-trip per tile
+    // (up to ~1,600 per turn on a full map).
+    if (sPendingGlyphCount >= sPendingGlyphCap) {
+        sPendingGlyphCap = sPendingGlyphCap ? sPendingGlyphCap * 2 : 2048;
+        sPendingGlyphs = realloc(sPendingGlyphs, (size_t)sPendingGlyphCap * sizeof(PendingGlyph));
+    }
+    sPendingGlyphs[sPendingGlyphCount++] = (PendingGlyph){ window, x, y, *gi, *bkgi };
 }
 
 static void cb_clipAround(int x, int y) {
@@ -337,9 +371,27 @@ static int cb_prevMessage(void) {
 // --- Misc / no-ops ---
 
 static void cb_getEvent(void)    {}
-static void cb_markSynch(void)   {}
-static void cb_waitSynch(void)   {}
-static void cb_delayOutput(void) {}
+
+static void cb_markSynch(void) {
+	// nothing to do
+}
+
+/*
+wait_synch()    -- Wait until all pending output is complete (*flush*() for
+				   streams goes here).
+				-- May also deal with exposure events etc. so that the
+				   display is OK when return from wait_synch().
+*/
+static void cb_waitSynch(void) {
+    BOOL hadGlyphs = (sPendingGlyphCount > 0);
+    flushPendingGlyphs();
+    if (hadGlyphs) {
+        [_activeBridge dispatchOutput:^{
+            [_activeDelegate waitSynch];
+        }];
+    }
+}
+
 static void cb_bell(void)        {}
 
 static void cb_rawPrint(const char *str) {
@@ -354,6 +406,11 @@ static void cb_rawPrintBold(const char *str) {
     [_activeBridge dispatchOutput:^{
         [_activeDelegate rawPrintBold:text];
     }];
+}
+
+static void cb_delayOutput(void) {
+    cb_waitSynch();   // flush pending glyphs so the frame is visible before the pause
+    usleep(50000);    // 50 ms — enough for animation to be perceptible
 }
 
 static void cb_preferenceUpdate(const char *pref) {

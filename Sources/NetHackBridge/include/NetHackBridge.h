@@ -182,6 +182,12 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
                     color:(int)color
                colorMasks:(const unsigned long * _Nullable)colorMasks;
 
+// --- Synchronisation ---
+
+/// wait_synch — flush all pending output to the display immediately.
+/// Called by NetHack to ensure output is visible before continuing.
+- (void)waitSynch;
+
 // --- Misc output ---
 
 /// update_positionbar — update the optional position-bar widget string.
