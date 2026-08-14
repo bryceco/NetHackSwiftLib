@@ -294,6 +294,11 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
 /// Each index is 0-based into the arrays passed to
 /// requestPlayerSelectionWithRoles:races:genders:aligns:, or
 /// NHSWIFT_ROLE_RANDOM (-2) to treat that slot as "any".
+/// Map a NetHack glyph number to its tile-sheet index.
+/// Returns -1 for glyph numbers outside the valid range.
++ (NSInteger)tileIndexForGlyph:(NSInteger)glyph
+    NS_SWIFT_NAME(tileIndex(forGlyph:));
+
 + (BOOL)isValidRole:(NSInteger)roleIndex
     NS_SWIFT_NAME(isValid(role:));
 + (BOOL)isValidRace:(NSInteger)raceIndex

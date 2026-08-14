@@ -650,6 +650,10 @@ static const nhswift_callbacks kBridgeCallbacks = {
     dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
 }
 
++ (NSInteger)tileIndexForGlyph:(NSInteger)glyph {
+    return (NSInteger)nhswift_glyph_to_tile(glyph);
+}
+
 + (BOOL)isValidRole:(NSInteger)roleIndex {
     return (BOOL)nhswift_validrole((int)roleIndex);
 }
