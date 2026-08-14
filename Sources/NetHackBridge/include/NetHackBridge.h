@@ -70,6 +70,24 @@ typedef NS_ENUM(int, NHTextAttribute) {
 
 
 // ---------------------------------------------------------------------------
+// NHPlayerSelection
+//
+// Returned by requestPlayerSelectionWithOptions: to communicate the user's
+// chosen role, race, gender, and alignment back to winswift.c.
+// Each index is a 0-based index into the corresponding array passed to the
+// delegate, or NHSWIFT_ROLE_RANDOM (-2) to let NetHack choose randomly.
+// ---------------------------------------------------------------------------
+@interface NHPlayerSelection : NSObject
+@property (nonatomic) NSInteger roleIndex;
+@property (nonatomic) NSInteger raceIndex;
+@property (nonatomic) NSInteger genderIndex;
+@property (nonatomic) NSInteger alignIndex;
+/// Player name to use, or nil / empty string to keep the existing name.
+@property (nonatomic, copy, nullable) NSString *playerName;
+@end
+
+
+// ---------------------------------------------------------------------------
 // NetHackBridgeDelegate
 //
 // Output callbacks are dispatched synchronously to the main thread (the
@@ -202,7 +220,14 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
 
 /// player_selection — NetHack is about to ask the player to choose
 /// character role, race, alignment, and gender.
-- (void)requestPlayerSelection;
+/// The arrays contain display strings read directly from NetHack's tables.
+/// Each index in the returned NHPlayerSelection maps back to the same
+/// position in the corresponding array.
+/// Return nil to fall back to NetHack's built-in dialog.
+- (nullable NHPlayerSelection *)requestPlayerSelectionWithRoles:(NSArray<NSString *> *)roles
+                                                          races:(NSArray<NSString *> *)races
+                                                        genders:(NSArray<NSString *> *)genders
+                                                         aligns:(NSArray<NSString *> *)aligns;
 
 /// init_nhwindows — the windowing system is being initialised.
 - (void)initWindows;
@@ -262,6 +287,26 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
 - (void)runWithHackdirURL:(NSURL *)hackdirURL
             playgroundURL:(NSURL *)playgroundURL
                completion:(nullable void (^)(int exitCode))completion;
+
+/// Query whether a role/race/gender/alignment combination is valid for
+/// player character selection.  Safe to call from the main thread while
+/// the game thread is blocked inside the playerSelection callback.
+/// Each index is 0-based into the arrays passed to
+/// requestPlayerSelectionWithRoles:races:genders:aligns:, or
+/// NHSWIFT_ROLE_RANDOM (-2) to treat that slot as "any".
++ (BOOL)isValidRole:(NSInteger)roleIndex
+    NS_SWIFT_NAME(isValid(role:));
++ (BOOL)isValidRace:(NSInteger)raceIndex
+            forRole:(NSInteger)roleIndex
+    NS_SWIFT_NAME(isValid(race:forRole:));
++ (BOOL)isValidGender:(NSInteger)genderIndex
+              forRole:(NSInteger)roleIndex
+                 race:(NSInteger)raceIndex
+    NS_SWIFT_NAME(isValid(gender:forRole:race:));
++ (BOOL)isValidAlign:(NSInteger)alignIndex
+             forRole:(NSInteger)roleIndex
+                race:(NSInteger)raceIndex
+    NS_SWIFT_NAME(isValid(align:forRole:race:));
 
 @end
 

@@ -46,6 +46,25 @@ extern void nhswift_set_paths(const char *hackdir, const char *playground);
 @end
 
 // ---------------------------------------------------------------------------
+// NHPlayerSelection
+// ---------------------------------------------------------------------------
+
+@implementation NHPlayerSelection
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _roleIndex   = NHSWIFT_ROLE_RANDOM;
+        _raceIndex   = NHSWIFT_ROLE_RANDOM;
+        _genderIndex = NHSWIFT_ROLE_RANDOM;
+        _alignIndex  = NHSWIFT_ROLE_RANDOM;
+    }
+    return self;
+}
+
+@end
+
+// ---------------------------------------------------------------------------
 // NetHackBridge — private interface
 // ---------------------------------------------------------------------------
 
@@ -104,15 +123,49 @@ static void cb_resumeWindows(void) {
 
 // --- Character creation ---
 
-static int cb_playerSelection(void) {
-    // Return 1 to let NetHack run its own built-in selection dialog.
-    // Change to 0 once we populate flags.initrole/initrace/initgend/initalign
-    // ourselves (e.g. via a custom PlayerSelectionView modal).
+static int cb_playerSelection(const nhswift_playerOptions *opts,
+                              nhswift_playerSelection *result)
+{
+    // Convert C option tables to Obj-C arrays so the Swift delegate receives
+    // plain strings without needing to know about nhswift_playerOptions.
+    NSMutableArray<NSString *> *roles   = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->roleCount];
+    NSMutableArray<NSString *> *races   = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->raceCount];
+    NSMutableArray<NSString *> *genders = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->genderCount];
+    NSMutableArray<NSString *> *aligns  = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->alignCount];
+
+    for (int i = 0; i < opts->roleCount;   i++) [roles   addObject:@(opts->roles[i])];
+    for (int i = 0; i < opts->raceCount;   i++) [races   addObject:@(opts->races[i])];
+    for (int i = 0; i < opts->genderCount; i++) [genders addObject:@(opts->genders[i])];
+    for (int i = 0; i < opts->alignCount;  i++) [aligns  addObject:@(opts->aligns[i])];
+
+    // dispatchOutput uses dispatch_sync; the delegate runs a modal event loop
+    // and returns with a filled NHPlayerSelection when the user confirms.
+    __block NHPlayerSelection *selection = nil;
+    [_activeBridge dispatchOutput:^{
+        selection = [_activeDelegate requestPlayerSelectionWithRoles:roles
+                                                              races:races
+                                                            genders:genders
+                                                             aligns:aligns];
+    }];
+
+    if (!selection) return 0;  // fall back to built-in dialog
+
+    result->roleIndex   = (int)selection.roleIndex;
+    result->raceIndex   = (int)selection.raceIndex;
+    result->genderIndex = (int)selection.genderIndex;
+    result->alignIndex  = (int)selection.alignIndex;
+    if (selection.playerName.length > 0) {
+        strncpy(result->playerName, selection.playerName.UTF8String,
+                sizeof(result->playerName) - 1);
+        result->playerName[sizeof(result->playerName) - 1] = '\0';
+    }
     return 1;
 }
 
 static void cb_askName(char *buf, int bufsize) {
-    // Write an empty string so NetHack prompts for the name via getLine.
+    // Name is supplied via the playerSelection result; write empty string so
+    // NetHack uses whatever plname was already set (e.g. from $USER or
+    // the playerName field in nhswift_playerSelection).
     if (buf && bufsize > 0) buf[0] = '\0';
 }
 
@@ -585,7 +638,8 @@ static const nhswift_callbacks kBridgeCallbacks = {
     // Use dispatch_sync so each output callback fully completes before the
     // NetHack thread issues the next one.  This preserves ordering and
     // prevents races on shared model objects.
-    dispatch_sync(dispatch_get_main_queue(), block);
+    dispatch_sync(dispatch_get_main_queue(),
+				  block);
 }
 
 - (void)dispatchInput:(void (^)(void (^)(void)))block {
@@ -594,6 +648,22 @@ static const nhswift_callbacks kBridgeCallbacks = {
         block(^{ dispatch_semaphore_signal(sem); });
     });
     dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+}
+
++ (BOOL)isValidRole:(NSInteger)roleIndex {
+    return (BOOL)nhswift_validrole((int)roleIndex);
+}
+
++ (BOOL)isValidRace:(NSInteger)raceIndex forRole:(NSInteger)roleIndex {
+    return (BOOL)nhswift_validrace((int)roleIndex, (int)raceIndex);
+}
+
++ (BOOL)isValidGender:(NSInteger)genderIndex forRole:(NSInteger)roleIndex race:(NSInteger)raceIndex {
+    return (BOOL)nhswift_validgend((int)roleIndex, (int)raceIndex, (int)genderIndex);
+}
+
++ (BOOL)isValidAlign:(NSInteger)alignIndex forRole:(NSInteger)roleIndex race:(NSInteger)raceIndex {
+    return (BOOL)nhswift_validalign((int)roleIndex, (int)raceIndex, (int)alignIndex);
 }
 
 @end
