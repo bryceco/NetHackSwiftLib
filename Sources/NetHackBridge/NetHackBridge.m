@@ -127,14 +127,22 @@ static int cb_playerSelection(const nhswift_playerOptions *opts,
                               nhswift_playerSelection *result)
 {
     // Convert C option tables to Obj-C arrays so the Swift delegate receives
-    // plain strings without needing to know about nhswift_playerOptions.
-    NSMutableArray<NSString *> *roles   = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->roleCount];
-    NSMutableArray<NSString *> *races   = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->raceCount];
-    NSMutableArray<NSString *> *genders = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->genderCount];
-    NSMutableArray<NSString *> *aligns  = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->alignCount];
+    // plain strings/numbers without needing to know about nhswift_playerOptions.
+    NSMutableArray<NSString *> *roles      = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->roleCount];
+    NSMutableArray<NSNumber *> *roleGlyphs = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->roleCount];
+    NSMutableArray<NSString *> *races      = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->raceCount];
+    NSMutableArray<NSNumber *> *raceGlyphs = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->raceCount];
+    NSMutableArray<NSString *> *genders    = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->genderCount];
+    NSMutableArray<NSString *> *aligns     = [NSMutableArray arrayWithCapacity:(NSUInteger)opts->alignCount];
 
-    for (int i = 0; i < opts->roleCount;   i++) [roles   addObject:@(opts->roles[i])];
-    for (int i = 0; i < opts->raceCount;   i++) [races   addObject:@(opts->races[i])];
+    for (int i = 0; i < opts->roleCount;   i++) {
+        [roles      addObject:@(opts->roles[i])];
+        [roleGlyphs addObject:@(opts->roleGlyphs[i])];
+    }
+    for (int i = 0; i < opts->raceCount;   i++) {
+        [races      addObject:@(opts->races[i])];
+        [raceGlyphs addObject:@(opts->raceGlyphs[i])];
+    }
     for (int i = 0; i < opts->genderCount; i++) [genders addObject:@(opts->genders[i])];
     for (int i = 0; i < opts->alignCount;  i++) [aligns  addObject:@(opts->aligns[i])];
 
@@ -143,7 +151,9 @@ static int cb_playerSelection(const nhswift_playerOptions *opts,
     __block NHPlayerSelection *selection = nil;
     [_activeBridge dispatchOutput:^{
         selection = [_activeDelegate requestPlayerSelectionWithRoles:roles
-                                                              races:races
+                                                          roleGlyphs:roleGlyphs
+                                                               races:races
+                                                          raceGlyphs:raceGlyphs
                                                             genders:genders
                                                              aligns:aligns];
     }];
@@ -166,7 +176,9 @@ static void cb_askName(char *buf, int bufsize) {
     // Name is supplied via the playerSelection result; write empty string so
     // NetHack uses whatever plname was already set (e.g. from $USER or
     // the playerName field in nhswift_playerSelection).
-    if (buf && bufsize > 0) buf[0] = '\0';
+	printf("cb_askName\n");
+    if (buf && bufsize > 0)
+		buf[0] = '\0';
 }
 
 // --- Window lifecycle ---

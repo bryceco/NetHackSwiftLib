@@ -225,7 +225,9 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
 /// position in the corresponding array.
 /// Return nil to fall back to NetHack's built-in dialog.
 - (nullable NHPlayerSelection *)requestPlayerSelectionWithRoles:(NSArray<NSString *> *)roles
+                                                     roleGlyphs:(NSArray<NSNumber *> *)roleGlyphs
                                                           races:(NSArray<NSString *> *)races
+                                                     raceGlyphs:(NSArray<NSNumber *> *)raceGlyphs
                                                         genders:(NSArray<NSString *> *)genders
                                                          aligns:(NSArray<NSString *> *)aligns;
 
