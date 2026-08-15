@@ -162,7 +162,7 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
                 accel:(char)accel
            groupAccel:(char)groupAccel
                  attr:(int)attr
-                color:(int)color
+                color:(NHColor)color
                string:(NSString *)string
                 flags:(unsigned int)flags
 				glyph:(int)glyph
