@@ -302,20 +302,31 @@ static void cb_startMenu(int window, unsigned long mbehavior) {
     }];
 }
 
-static void cb_addMenu(int window, const nhswift_glyph *gi,
-                       int ch, int gch, int attr, int clr,
-                       const char *str, unsigned int itemflags,
+// add_menu callback — appends one item to the in-progress menu in `window`.
+//   glyphInfo  — glyph info for the item's tile; gi->glyph == -1 (NO_GLYPH) means no icon.
+//                Pointer is only valid for the duration of this call.
+//   accel      — accelerator (inventory letter, e.g. 'a'); 0 if the item has no hotkey.
+//   grpAccel   — group accelerator for bulk-selection of a category; 0 if unused.
+//   attr       — text attribute bitmask (ATR_BOLD, ATR_DIM, …).
+//   color      — color index (CLR_*).
+//   string     — display label; may be NULL (treated as empty string).
+//   itemflags  — MENU_ITEMFLAGS_* bitmask (e.g. MENU_ITEMFLAGS_SELECTED for pre-checked).
+//   identifier — opaque `anything` value from NetHack, returned unchanged in selectMenu
+//                to identify which items the user chose.
+static void cb_addMenu(int window, const nhswift_glyph *glyphInfo,
+                       int accel, int grpAccel, int attr, int color,
+                       const char *string, unsigned int itemflags,
                        uintptr_t identifier) {
-    NSString *text = str ? @(str) : @"";
+    NSString *nsString = string ? @(string) : @"";
     [_activeBridge dispatchOutput:^{
         [_activeDelegate addMenuItemIn:window
-                                 accel:(char)ch
-                            groupAccel:(char)gch
+                                 accel:(char)accel
+                            groupAccel:(char)grpAccel
                                   attr:attr
-                                 color:clr
-                                string:text
+                                 color:color
+                                string:nsString
                                  flags:itemflags
-								 glyph:gi->glyph
+								 glyph:glyphInfo->glyph
                             identifier:identifier];
     }];
 }
