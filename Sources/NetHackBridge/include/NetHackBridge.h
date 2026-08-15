@@ -165,7 +165,7 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
                 color:(int)color
                string:(NSString *)string
                 flags:(unsigned int)flags
-            glyphInfo:(const void *)glyphInfo
+				glyph:(int)glyph
            identifier:(uintptr_t)identifier;
 
 /// end_menu — finalise the current menu with an optional prompt string.

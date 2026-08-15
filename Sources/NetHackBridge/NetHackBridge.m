@@ -315,7 +315,7 @@ static void cb_addMenu(int window, const nhswift_glyph *gi,
                                  color:clr
                                 string:text
                                  flags:itemflags
-                             glyphInfo:(const void *)gi
+								 glyph:gi->glyph
                             identifier:identifier];
     }];
 }
