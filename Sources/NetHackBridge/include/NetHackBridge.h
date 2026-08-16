@@ -182,22 +182,22 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
 
 /// status_enablefield — configure which status fields are active and how they
 /// are formatted.
-- (void)enableStatusField:(int)fieldIndex
+- (void)enableStatusField:(NHStatusField)fieldIndex
                      name:(NSString *)name
                    format:(NSString *)format
                   enabled:(BOOL)enabled;
 
 /// status_update — the value of one status field has changed.
 /// For most fields, text holds the preformatted value and condBits is 0.
-/// For the condition field (NHSWIFT_BL_CONDITION), text is nil and condBits
-/// holds the bitmask of active conditions.
+/// For NHStatusFieldCondition, text is nil and condBits holds the bitmask
+/// of active conditions.
 /// colorMasks is an array of unsigned longs valid for this call only.
-- (void)updateStatusField:(int)fieldIndex
+- (void)updateStatusField:(NHStatusField)fieldIndex
                      text:(nullable NSString *)text
                  condBits:(long)condBits
                    change:(int)change
                   percent:(int)percent
-                    color:(int)color
+                    color:(NHColor)color
                colorMasks:(const unsigned long * _Nullable)colorMasks;
 
 // --- Synchronisation ---

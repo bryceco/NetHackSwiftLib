@@ -533,7 +533,7 @@ static void cb_statusInit(void) {
     }];
 }
 
-static void cb_statusEnableField(int fieldidx, const char *nm,
+static void cb_statusEnableField(NHStatusField fieldidx, const char *nm,
                                  const char *fmt, int enable)
 {
     NSString *nameStr = nm  ? @(nm)  : @"";
@@ -546,8 +546,8 @@ static void cb_statusEnableField(int fieldidx, const char *nm,
     }];
 }
 
-static void cb_statusUpdate(int fldidx, const char *text, long condbits,
-                            int chg, int percent, int color,
+static void cb_statusUpdate(NHStatusField fldidx, const char *text, long condbits,
+                            int chg, int percent, NHColor color,
                             const unsigned long *colormasks)
 {
     // text and colormasks are valid only for this call; dispatchOutput is
