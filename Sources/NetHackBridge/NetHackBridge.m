@@ -643,7 +643,9 @@ static const nhswift_callbacks kBridgeCallbacks = {
 	argv[0] = progname;
 	argv[1] = NULL;
 
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    // Use QOS_CLASS_USER_INTERACTIVE to avoid priority inversion when
+	// display modal windows.
+	dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
         int result = nhmain(argc, argv);
         free(argv[0]);
         free(argv);
