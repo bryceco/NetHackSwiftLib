@@ -567,15 +567,18 @@ static void cb_statusEnableField(NHStatusField fieldidx, const char *nm,
     }];
 }
 
-static void cb_statusUpdate(NHStatusField fldidx, const char *text, long condbits,
+static void cb_statusUpdate(int fldidx, const char *text, long condbits,
                             int chg, int percent, NHColor color,
                             const unsigned long *colormasks)
 {
+    // fldidx is int (not NHStatusField) so ARM64 passes it correctly; cast
+    // here where NSInteger sign-extends the 32-bit value properly.
+    NHStatusField field = (NHStatusField)fldidx;
     // text and colormasks are valid only for this call; dispatchOutput is
     // synchronous so the delegate receives them while they are still live.
     NSString *textStr = text ? @(text) : nil;
     [_activeBridge dispatchOutput:^{
-        [_activeDelegate updateStatusField:fldidx
+        [_activeDelegate updateStatusField:field
                                       text:textStr
                                   condBits:condbits
                                     change:chg
