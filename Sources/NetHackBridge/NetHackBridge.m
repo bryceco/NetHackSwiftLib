@@ -106,6 +106,9 @@ static void cb_exitWindows(const char *lastgasp) {
     [_activeBridge dispatchOutput:^{
         [_activeDelegate exitWindowsWithMessage:msg];
     }];
+    // Block this thread permanently so the exit() that NetHack calls after
+    // returning from exit_nhwindows never executes.
+    dispatch_semaphore_wait(dispatch_semaphore_create(0), DISPATCH_TIME_FOREVER);
 }
 
 static void cb_suspendWindows(const char *str) {
