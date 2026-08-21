@@ -194,7 +194,7 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
 /// colorMasks is an array of unsigned longs valid for this call only.
 - (void)updateStatusField:(NHStatusField)fieldIndex
                      text:(nullable NSString *)text
-                 condBits:(long)condBits
+                 condBits:(NHCondition)condBits
                    change:(int)change
                   percent:(int)percent
                     color:(NHColor)color

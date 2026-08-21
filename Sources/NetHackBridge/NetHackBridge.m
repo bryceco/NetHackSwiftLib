@@ -580,7 +580,7 @@ static void cb_statusUpdate(int fldidx, const char *text, long condbits,
     [_activeBridge dispatchOutput:^{
         [_activeDelegate updateStatusField:field
                                       text:textStr
-                                  condBits:condbits
+                                  condBits:(NHCondition)condbits
                                     change:chg
                                    percent:percent
                                      color:color
