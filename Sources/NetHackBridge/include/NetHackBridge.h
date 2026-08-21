@@ -175,7 +175,7 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
 /// how: 0 = PICK_NONE (display only), 1 = PICK_ONE, 2 = PICK_ANY.
 /// Call completion(selections) with the chosen items, or completion(nil) to cancel.
 - (void)selectMenuIn:(NHWindowID)window
-                 how:(int)how
+                 how:(NHPickMode)how
           completion:(void (^)(NSArray<NHMenuSelection *> * _Nullable selections))completion;
 
 // --- Status bar ---
@@ -198,7 +198,8 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
                    change:(int)change
                   percent:(int)percent
                     color:(NHColor)color
-               colorMasks:(const unsigned long * _Nullable)colorMasks;
+               colorMasks:(const unsigned long * _Nullable)colorMasks
+NS_SWIFT_NAME(updateStatus(field:text:condBits:change:percent:color:colorMasks:));
 
 // --- Synchronisation ---
 

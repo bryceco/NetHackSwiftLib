@@ -346,7 +346,7 @@ static int cb_selectMenu(int window, int how,
     __block int result = NHSWIFT_MENU_CANCELLED;
     [_activeBridge dispatchInput:^(void (^done)(void)) {
         [_activeDelegate selectMenuIn:window
-                                  how:how
+                                  how:(NHPickMode)how
                            completion:^(NSArray<NHMenuSelection *> *selections) {
             if (!selections) {
                 result = NHSWIFT_MENU_CANCELLED;
