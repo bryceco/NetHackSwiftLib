@@ -438,8 +438,14 @@ static void cb_getLine(const char *query, char *buf, int bufsize) {
 }
 
 static int cb_getExtCmd(void) {
-    NSLog(@"cb_getExtCmd needs a delegate function");
-    return -1;
+    __block int result = -1;
+    [_activeBridge dispatchInput:^(void (^done)(void)) {
+        [_activeDelegate needExtCmdWithCompletion:^(int cmdIndex) {
+            result = cmdIndex;
+            done();
+        }];
+    }];
+    return result;
 }
 
 static int cb_prevMessage(void) {

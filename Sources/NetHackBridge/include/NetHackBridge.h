@@ -272,6 +272,11 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
      defaultResponse:(int)defaultResponse
           completion:(void (^)(int choice))completion;
 
+/// get_ext_cmd — NetHack needs the user to choose an extended command (e.g. via '#').
+/// Call completion(index) with the index into extcmdlist[] of the chosen command,
+/// or completion(-1) to cancel.
+- (void)needExtCmdWithCompletion:(void (^)(int cmdIndex))completion;
+
 @end
 
 
