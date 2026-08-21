@@ -273,9 +273,16 @@ backgroundGlyphInfo:(const nhswift_glyph *)backgroundGlyphInfo;
           completion:(void (^)(int choice))completion;
 
 /// get_ext_cmd — NetHack needs the user to choose an extended command (e.g. via '#').
-/// Call completion(index) with the index into extcmdlist[] of the chosen command,
-/// or completion(-1) to cancel.
-- (void)needExtCmdWithCompletion:(void (^)(int cmdIndex))completion;
+/// names, descriptions, and keys are parallel arrays of all user-visible extended
+/// commands, in extcmdlist[] order.  Each key is a UInt8: high bit set = Option/meta,
+/// value < 32 = Control key, 0 = no direct key binding.
+/// Call completion(index) with the 0-based index of the chosen command, or
+/// completion(-1) to cancel.
+- (void)needExtCmdNames:(NSArray<NSString *> *)names
+           descriptions:(NSArray<NSString *> *)descriptions
+                   keys:(NSArray<NSNumber *> *)keys
+             completion:(void (^)(int cmdIndex))completion
+    NS_SWIFT_NAME(needExtCmd(names:descriptions:keys:completion:));
 
 @end
 

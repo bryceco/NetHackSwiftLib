@@ -437,10 +437,22 @@ static void cb_getLine(const char *query, char *buf, int bufsize) {
     }];
 }
 
-static int cb_getExtCmd(void) {
+static int cb_getExtCmd(const nhswift_extcmd *cmds, int count) {
+    NSMutableArray<NSString *> *names = [NSMutableArray arrayWithCapacity:count];
+    NSMutableArray<NSString *> *descs = [NSMutableArray arrayWithCapacity:count];
+    NSMutableArray<NSNumber *> *keys  = [NSMutableArray arrayWithCapacity:count];
+    for (int i = 0; i < count; i++) {
+        [names addObject:@(cmds[i].name)];
+        [descs addObject:@(cmds[i].desc)];
+        [keys  addObject:@((uint8_t)cmds[i].key)];
+    }
+
     __block int result = -1;
     [_activeBridge dispatchInput:^(void (^done)(void)) {
-        [_activeDelegate needExtCmdWithCompletion:^(int cmdIndex) {
+        [_activeDelegate needExtCmdNames:names
+                            descriptions:descs
+                                    keys:keys
+                              completion:^(int cmdIndex) {
             result = cmdIndex;
             done();
         }];
